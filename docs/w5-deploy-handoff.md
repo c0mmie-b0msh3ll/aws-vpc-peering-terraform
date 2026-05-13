@@ -19,6 +19,7 @@ Sau buoc network foundation, W5 deploy tiep cac phan:
 - Backend chay tren EC2 trong private subnet, sau public ALB
 - EFS mount chung vao cac EC2 backend de lam workspace export temporary storage
 - REST API Gateway cho AI, co API Key + Usage Plan
+- Bedrock Knowledge Base cho chatbot docs
 - Lambda AI:
   - `jwtAuthorizer`
   - `askDocsBot`
@@ -207,7 +208,44 @@ Tao ASG:
 - Desired 1, Min 1, Max 2
 - Attach target group
 
-### A6. AI Lambdas
+### A6. Bedrock Knowledge Base for docs chatbot
+
+Buoc nay can lam truoc khi tao/cau hinh `askDocsBot`, vi Lambda can `KNOWLEDGE_BASE_ID`.
+
+Nguon docs AI:
+
+- Lay file docs AI tu anh Tien.
+- Upload vao S3 docs bucket rieng, vi du `taskio-w5-ai-docs-<account-id>`.
+- Khong upload secret, `.env`, access key, private note vao bucket docs.
+
+Setup tren AWS Console:
+
+1. Vao Amazon Bedrock > Knowledge Bases.
+2. Create knowledge base.
+3. Name: `taskio-w5-docs-kb`.
+4. IAM role:
+   - Co the de Bedrock auto-create role.
+   - Role can doc S3 docs bucket va ghi/doc vector store.
+5. Data source:
+   - Type: S3.
+   - S3 URI: `s3://<docs-bucket>/<docs-prefix>/`.
+6. Embedding model:
+   - Amazon Titan Text Embeddings v2.
+7. Vector store:
+   - Dung option ma lab/account ho tro, vi du S3 Vectors/OpenSearch Serverless.
+   - Neu dung S3 Vectors, tao vector bucket/index truoc roi chon index do trong KB.
+8. Create KB.
+9. Sync data source.
+10. Test retrieve/query trong Bedrock console.
+11. Ghi lai Knowledge Base ID de set vao Lambda env:
+    - `KNOWLEDGE_BASE_ID=<bedrock-kb-id>`
+
+Notes:
+
+- Current Lambda `askDocsBot` dang goi Bedrock Knowledge Base, nen neu KB ID sai/mat thi API Gateway/auth van OK nhung chatbot se return error.
+- File `w5-source/lambdas/iam-policies/kb-config.json` chi la config tham khao tu setup hien tai, can thay account/region/resource ARN theo moi truong moi.
+
+### A7. AI Lambdas
 
 Upload Lambda zips to S3:
 
@@ -239,7 +277,7 @@ IAM:
   - Secrets Manager read Mongo secret
   - SQS SendMessage to failure queue
 
-### A7. REST API Gateway + Usage Plan
+### A8. REST API Gateway + Usage Plan
 
 Create REST API:
 
@@ -281,7 +319,7 @@ CORS:
 - Allow headers: `authorization,content-type,x-api-key`
 - Allow methods: `POST,OPTIONS`
 
-### A8. Frontend deploy
+### A9. Frontend deploy
 
 Set production env:
 
@@ -585,7 +623,69 @@ aws autoscaling create-auto-scaling-group `
   --target-group-arns $TgArn
 ```
 
-### B8. Package and upload Lambdas
+### B8. Bedrock Knowledge Base for docs chatbot by CLI
+
+Neu team deploy bang CLI, van co the tao KB bang Console cho nhanh. Neu can CLI, flow toi thieu la:
+
+1. Upload docs AI cua anh Tien vao S3:
+
+```powershell
+$DocsBucket = "taskio-w5-ai-docs-<account-id>"
+$DocsPrefix = "docs/"
+aws s3 mb "s3://$DocsBucket" --region $Region
+aws s3 sync ".\ai-docs" "s3://$DocsBucket/$DocsPrefix" --region $Region
+```
+
+2. Tao/confirm vector store theo option account ho tro.
+
+- Neu lab/account co S3 Vectors, tao vector bucket/index va dung ARN index trong KB config.
+- Neu account dung OpenSearch Serverless, tao collection/index va cap quyen cho Bedrock role.
+- Phan nay co the lam tren Console de tranh sai IAM/vector policy.
+
+3. Tao Bedrock KB role:
+
+- Trust principal: `bedrock.amazonaws.com`.
+- Permission toi thieu:
+  - Read S3 docs bucket.
+  - Write/read vector store.
+  - Invoke embedding model.
+
+4. Tao Knowledge Base:
+
+```powershell
+aws bedrock-agent create-knowledge-base `
+  --region $Region `
+  --cli-input-json file://kb-config.json
+```
+
+5. Tao data source cho S3 docs bucket:
+
+```powershell
+aws bedrock-agent create-data-source `
+  --region $Region `
+  --knowledge-base-id <bedrock-kb-id> `
+  --name taskio-docs-s3 `
+  --data-source-configuration "type=S3,s3Configuration={bucketArn=arn:aws:s3:::$DocsBucket,inclusionPrefixes=[$DocsPrefix]}"
+```
+
+6. Start ingestion/sync:
+
+```powershell
+aws bedrock-agent start-ingestion-job `
+  --region $Region `
+  --knowledge-base-id <bedrock-kb-id> `
+  --data-source-id <data-source-id>
+```
+
+7. Lay Knowledge Base ID va set vao Lambda env:
+
+```text
+KNOWLEDGE_BASE_ID=<bedrock-kb-id>
+```
+
+Note: `w5-source/lambdas/iam-policies/kb-config.json` la reference config. Khong dung y nguyen ARN account cu; thay role ARN, embedding model region, vector index ARN theo environment moi.
+
+### B9. Package and upload Lambdas
 
 ```powershell
 tar -a -cf E:\bomb\taskio-ai-lambdas\jwtAuthorizer.zip -C E:\bomb\taskio-ai-lambdas\jwtAuthorizer .
@@ -597,9 +697,9 @@ aws s3 cp E:\bomb\taskio-ai-lambdas\askDocsBot.zip "s3://$ArtifactBucket/lambda/
 aws s3 cp E:\bomb\taskio-ai-lambdas\summarizeWorkspace.zip "s3://$ArtifactBucket/lambda/summarizeWorkspace.zip" --region $Region
 ```
 
-### B9. Lambda IAM roles and functions
+### B10. Lambda IAM roles and functions
 
-Tao IAM roles theo Console section A6 hoac dung policy JSON trong `w5-source/lambdas/iam-policies/`.
+Tao IAM roles theo Console section A7 hoac dung policy JSON trong `w5-source/lambdas/iam-policies/`.
 
 Create/update functions:
 
@@ -637,7 +737,7 @@ aws lambda create-function `
   --environment "Variables={MONGO_SECRET_ARN=<mongo-secret-arn>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
 ```
 
-### B10. REST API Gateway + Usage Plan
+### B11. REST API Gateway + Usage Plan
 
 Generate an API key value:
 
@@ -729,7 +829,7 @@ Note: CORS `OPTIONS` co the tao bang Console de nhanh hon, hoac bang CLI `put-me
 - Headers: `authorization,content-type,x-api-key`
 - Methods: `POST,OPTIONS`
 
-### B11. Update frontend
+### B12. Update frontend
 
 Set `.env.production`:
 
@@ -806,6 +906,7 @@ df -h /mnt/taskio-shared
 - Current DB already has `subscriptions.planFeatureSnapshot.limits`, but does not yet have an AI usage counter collection.
 - Suggested future collection: `aiUsageCounters`.
 - `askDocsBot` currently depends on a valid Bedrock Knowledge Base ID. If KB ID is missing/deleted, gateway/auth layer works but Lambda returns internal error.
+- Bedrock KB docs source is owned by anh Tien in the current team flow; pull those docs before sync/ingestion.
 
 ## 8. Recommended message to team
 
