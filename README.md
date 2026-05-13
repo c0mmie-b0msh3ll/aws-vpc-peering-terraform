@@ -11,7 +11,7 @@ Repo nay la buoc foundation cho W5 deploy:
    - VPC Peering 2 chieu
    - VPC Flow Logs
 
-2. Sau khi network foundation xong, deploy cac layer tiep theo:
+2. Sau khi network foundation xong, deploy cac layer tiep theo bang AWS Console hoac AWS CLI:
    - Backend EC2 Auto Scaling Group + ALB
    - EFS shared storage cho workspace export
    - AI Lambda runtime
@@ -23,7 +23,7 @@ Tai lieu chi tiet:
 - Terraform VPC/Peering: [_vpc_guide.md](./_vpc_guide.md)
 - Terraform commands: [command_guide.md](./command_guide.md)
 - Full deploy handoff: [docs/w5-deploy-handoff.md](./docs/w5-deploy-handoff.md)
-- CloudFormation source tham khao/chay CLI: [w5-cloudformation/](./w5-cloudformation/)
+- CloudFormation reference only: [w5-cloudformation/](./w5-cloudformation/)
 - App source snapshot de deploy/build lai:
   - Backend API: [w5-source/backend/](./w5-source/backend/)
   - Frontend web: [w5-source/frontend/](./w5-source/frontend/)
@@ -31,7 +31,7 @@ Tai lieu chi tiet:
 
 Note quan trong:
 
-- `w5-cloudformation/cloudformation/w5-foundation.all-in-one.yaml` la ban all-in-one da dung trong qua trinh deploy hien tai. File nay co tao VPC rieng.
-- Neu team di theo flow chuan cua repo nay, hay dung Terraform VPC/Peering lam buoc 1, roi dung cac template/backend/API phia sau voi outputs tu Terraform.
+- Flow chuan cua team: dung Terraform VPC/Peering lam buoc 1, sau do deploy cac resource W5 bang AWS Console hoac AWS CLI.
+- `w5-cloudformation/cloudformation/w5-foundation.all-in-one.yaml` la ban tham khao/all-in-one da dung de validate architecture. File nay co tao VPC rieng, khong phai flow deploy chinh cua team.
 - `terraform.tfstate` dang ton tai trong repo goc. Neu dung cho moi truong that, nen move state sang S3 backend + DynamoDB lock va remove state file khoi git.
-- Cac file runtime/secret nhu `.env`, `.env.production`, zip lambda, `node_modules`, build output va PEM private key khong commit vao repo nay. Dung `.env.example` va CloudFormation parameters/secrets de cau hinh khi deploy.
+- Cac file runtime/secret nhu `.env`, `.env.production`, zip lambda, `node_modules`, build output va PEM private key khong commit vao repo nay. Dung `.env.example`, SSM Parameter Store va Secrets Manager de cau hinh khi deploy.

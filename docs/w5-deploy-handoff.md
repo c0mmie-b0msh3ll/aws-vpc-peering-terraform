@@ -28,7 +28,7 @@ Sau buoc network foundation, W5 deploy tiep cac phan:
 
 ## 1. Current deployed architecture
 
-Current AWS deploy dang chay theo CloudFormation W5 expanded implementation.
+Current AWS deploy dang chay theo W5 expanded implementation. CloudFormation da tung duoc dung de validate nhanh resource shape, nhung handoff cho team se uu tien deploy tay tren Console hoac bang AWS CLI.
 
 Main endpoints:
 
@@ -300,9 +300,9 @@ aws s3 cp dist/index.html s3://danhnam-taskio-frontend/index.html --region ap-so
 aws cloudfront create-invalidation --distribution-id E3GXHALT9JVH6U --paths / /index.html
 ```
 
-## 4. Deploy version B - AWS CLI + CloudFormation
+## 4. Deploy version B - AWS CLI without CloudFormation
 
-Dung cach nay cho clean/repeatable deploy.
+Dung cach nay khi muon deploy repeatable hon Console, nhung van khong dung CloudFormation. CLI commands ben duoi tao resource theo thu tu tuong tu Console.
 
 ### B1. Network foundation
 
@@ -316,28 +316,99 @@ terraform apply tfplan
 terraform output
 ```
 
-Lay outputs VPC/subnet/route table de truyen vao cac stack tiep theo.
+Lay outputs VPC/subnet/route table de dung cho cac lenh AWS CLI tiep theo.
 
-### B2. CloudFormation source
+### B2. Common variables
 
-Source nam trong:
+Set bien moi truong local de tranh go sai ID:
 
-```text
-w5-cloudformation/
+```powershell
+$Region = "us-east-1"
+$Project = "taskio-w5"
+$AppVpcId = "<application-vpc-id>"
+$PublicSubnetA = "<public-subnet-a>"
+$PublicSubnetB = "<public-subnet-b>"
+$PrivateSubnetA = "<private-subnet-a>"
+$PrivateSubnetB = "<private-subnet-b>"
+$ArtifactBucket = "<artifact-bucket>"
+$DomainOrigin = "https://taskio.nigga.in.net"
 ```
 
-Main templates:
+### B3. Security groups
 
-- `cloudformation/w5-backend.yaml`
-  - Backend ALB, Target Group, Launch Template, ASG, EC2 IAM role, EFS mount in user data.
-- `cloudformation/w5-ai-api.yaml`
-  - Lambda runtime stack: authorizer, AI lambdas, SQS failure queue.
-- `cloudformation/w5-ai-rest-api.yaml`
-  - REST API Gateway, Lambda authorizer, API Key, Usage Plan, access logs.
-- `cloudformation/w5-foundation.all-in-one.yaml`
-  - Reference/all-in-one template used in current deployment. This creates its own VPC, so do not use it together with Terraform foundation unless intentionally creating a separate environment.
+```powershell
+$AlbSgId = aws ec2 create-security-group `
+  --region $Region `
+  --group-name "$Project-alb-sg" `
+  --description "TaskIO W5 public ALB" `
+  --vpc-id $AppVpcId `
+  --query "GroupId" `
+  --output text
 
-### B3. Package backend
+aws ec2 authorize-security-group-ingress `
+  --region $Region `
+  --group-id $AlbSgId `
+  --protocol tcp `
+  --port 80 `
+  --cidr 0.0.0.0/0
+
+$AppSgId = aws ec2 create-security-group `
+  --region $Region `
+  --group-name "$Project-app-sg" `
+  --description "TaskIO W5 backend EC2" `
+  --vpc-id $AppVpcId `
+  --query "GroupId" `
+  --output text
+
+aws ec2 authorize-security-group-ingress `
+  --region $Region `
+  --group-id $AppSgId `
+  --protocol tcp `
+  --port 8017 `
+  --source-group $AlbSgId
+
+$EfsSgId = aws ec2 create-security-group `
+  --region $Region `
+  --group-name "$Project-efs-sg" `
+  --description "TaskIO W5 EFS" `
+  --vpc-id $AppVpcId `
+  --query "GroupId" `
+  --output text
+
+aws ec2 authorize-security-group-ingress `
+  --region $Region `
+  --group-id $EfsSgId `
+  --protocol tcp `
+  --port 2049 `
+  --source-group $AppSgId
+```
+
+### B4. EFS
+
+```powershell
+$EfsId = aws efs create-file-system `
+  --region $Region `
+  --encrypted `
+  --performance-mode generalPurpose `
+  --throughput-mode bursting `
+  --tags Key=Name,Value="$Project-exports" `
+  --query "FileSystemId" `
+  --output text
+
+aws efs create-mount-target `
+  --region $Region `
+  --file-system-id $EfsId `
+  --subnet-id $PrivateSubnetA `
+  --security-groups $EfsSgId
+
+aws efs create-mount-target `
+  --region $Region `
+  --file-system-id $EfsId `
+  --subnet-id $PrivateSubnetB `
+  --security-groups $EfsSgId
+```
+
+### B5. Package backend and store env
 
 ```powershell
 $stage = "E:\bomb\.deploy\taskio-api-package"
@@ -350,90 +421,223 @@ Get-ChildItem -LiteralPath "E:\bomb\taskio-api" -Force |
   Where-Object { $exclude -notcontains $_.Name } |
   ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force }
 tar -a -cf $zip -C $stage .
-aws s3 cp $zip s3://<artifact-bucket>/backend/taskio-api.zip --region us-east-1
-```
 
-### B4. Store backend env in SSM
+aws s3 mb "s3://$ArtifactBucket" --region $Region
+aws s3 cp $zip "s3://$ArtifactBucket/backend/taskio-api.zip" --region $Region
 
-```bash
-aws ssm put-parameter \
-  --region us-east-1 \
-  --name /taskio/w5/api-env \
-  --type SecureString \
-  --value file://api.env \
+aws ssm put-parameter `
+  --region $Region `
+  --name /taskio/w5/api-env `
+  --type SecureString `
+  --value file://api.env `
   --overwrite
 ```
 
-### B5. Deploy backend stack
+### B6. Backend IAM role and instance profile
 
-Before this step, create or provide:
+```powershell
+@'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "ec2.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+'@ | Set-Content .\ec2-trust.json -Encoding ascii
 
-- VPC ID
-- public subnet IDs
-- app private subnet IDs
-- ALB SG ID
-- App SG ID
-- EFS file system ID
-- artifact bucket
+aws iam create-role `
+  --role-name "$Project-ec2-role" `
+  --assume-role-policy-document file://ec2-trust.json
 
-Then:
+aws iam attach-role-policy `
+  --role-name "$Project-ec2-role" `
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
-```bash
-aws cloudformation deploy \
-  --region us-east-1 \
-  --stack-name taskio-w5-backend \
-  --template-file w5-cloudformation/cloudformation/w5-backend.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides \
-    ProjectName=taskio-w5 \
-    VpcId=<application-vpc-id> \
-    PublicSubnetIds=<public-subnet-a>,<public-subnet-b> \
-    AppPrivateSubnetIds=<private-subnet-a>,<private-subnet-b> \
-    AlbSecurityGroupId=<alb-sg-id> \
-    AppSecurityGroupId=<app-sg-id> \
-    EfsFileSystemId=<efs-id> \
-    ArtifactBucket=<artifact-bucket> \
-    ArtifactKey=backend/taskio-api.zip \
-    EnvParameterName=/taskio/w5/api-env \
-    DesiredCapacity=1 \
-    MinSize=1 \
-    MaxSize=2 \
-    ApiPort=8017
+@"
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": "arn:aws:s3:::$ArtifactBucket/backend/*" },
+    { "Effect": "Allow", "Action": ["ssm:GetParameter"], "Resource": "*" },
+    { "Effect": "Allow", "Action": ["kms:Decrypt"], "Resource": "*" },
+    { "Effect": "Allow", "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], "Resource": "*" }
+  ]
+}
+"@ | Set-Content .\backend-inline-policy.json -Encoding ascii
+
+aws iam put-role-policy `
+  --role-name "$Project-ec2-role" `
+  --policy-name "$Project-backend-inline" `
+  --policy-document file://backend-inline-policy.json
+
+aws iam create-instance-profile --instance-profile-name "$Project-ec2-profile"
+aws iam add-role-to-instance-profile --instance-profile-name "$Project-ec2-profile" --role-name "$Project-ec2-role"
 ```
 
-### B6. Package and upload Lambdas
+### B7. Backend ALB, launch template, ASG
+
+Tao user data file `backend-user-data.sh`. Gia tri `$EfsId`, `$ArtifactBucket`, region va env parameter can thay dung truoc khi tao launch template.
+
+```bash
+#!/bin/bash
+set -eux
+dnf update -y
+dnf install -y nodejs npm unzip amazon-efs-utils redis6
+mkdir -p /mnt/taskio-shared/exports /opt/taskio-api
+mount -t efs -o tls EFS_ID:/ /mnt/taskio-shared
+echo "EFS_ID:/ /mnt/taskio-shared efs _netdev,tls 0 0" >> /etc/fstab
+aws s3 cp s3://ARTIFACT_BUCKET/backend/taskio-api.zip /tmp/taskio-api.zip --region us-east-1
+unzip -o /tmp/taskio-api.zip -d /opt/taskio-api
+aws ssm get-parameter --name /taskio/w5/api-env --with-decryption --query Parameter.Value --output text --region us-east-1 > /opt/taskio-api/.env
+cd /opt/taskio-api
+npm ci
+npm run build
+cat >/etc/systemd/system/taskio-api.service <<'EOF'
+[Unit]
+Description=TaskIO API
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/taskio-api
+EnvironmentFile=/opt/taskio-api/.env
+ExecStart=/usr/bin/node build/src/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now redis6
+systemctl enable --now taskio-api
+```
+
+Create load balancer, target group, launch template, ASG:
+
+```powershell
+$AlbArn = aws elbv2 create-load-balancer `
+  --region $Region `
+  --name "$Project-api-alb" `
+  --subnets $PublicSubnetA $PublicSubnetB `
+  --security-groups $AlbSgId `
+  --query "LoadBalancers[0].LoadBalancerArn" `
+  --output text
+
+$TgArn = aws elbv2 create-target-group `
+  --region $Region `
+  --name "$Project-api-tg" `
+  --protocol HTTP `
+  --port 8017 `
+  --vpc-id $AppVpcId `
+  --health-check-path /api/v1/health `
+  --target-type instance `
+  --query "TargetGroups[0].TargetGroupArn" `
+  --output text
+
+aws elbv2 create-listener `
+  --region $Region `
+  --load-balancer-arn $AlbArn `
+  --protocol HTTP `
+  --port 80 `
+  --default-actions Type=forward,TargetGroupArn=$TgArn
+
+$AmiId = aws ssm get-parameter `
+  --region $Region `
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 `
+  --query "Parameter.Value" `
+  --output text
+
+(Get-Content .\backend-user-data.sh) `
+  -replace "EFS_ID", $EfsId `
+  -replace "ARTIFACT_BUCKET", $ArtifactBucket |
+  Set-Content .\backend-user-data.rendered.sh -Encoding ascii
+
+$UserData = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path .\backend-user-data.rendered.sh)))
+
+@"
+{
+  "ImageId": "$AmiId",
+  "InstanceType": "t3.micro",
+  "IamInstanceProfile": { "Name": "$Project-ec2-profile" },
+  "SecurityGroupIds": ["$AppSgId"],
+  "UserData": "$UserData"
+}
+"@ | Set-Content .\launch-template-data.json -Encoding ascii
+
+$LtId = aws ec2 create-launch-template `
+  --region $Region `
+  --launch-template-name "$Project-backend-lt" `
+  --launch-template-data file://launch-template-data.json `
+  --query "LaunchTemplate.LaunchTemplateId" `
+  --output text
+
+aws autoscaling create-auto-scaling-group `
+  --region $Region `
+  --auto-scaling-group-name "$Project-backend-asg" `
+  --launch-template "LaunchTemplateId=$LtId,Version=`$Latest" `
+  --min-size 1 `
+  --max-size 2 `
+  --desired-capacity 1 `
+  --vpc-zone-identifier "$PrivateSubnetA,$PrivateSubnetB" `
+  --target-group-arns $TgArn
+```
+
+### B8. Package and upload Lambdas
 
 ```powershell
 tar -a -cf E:\bomb\taskio-ai-lambdas\jwtAuthorizer.zip -C E:\bomb\taskio-ai-lambdas\jwtAuthorizer .
 tar -a -cf E:\bomb\taskio-ai-lambdas\askDocsBot.zip -C E:\bomb\taskio-ai-lambdas\askDocsBot .
 tar -a -cf E:\bomb\taskio-ai-lambdas\summarizeWorkspace.zip -C E:\bomb\taskio-ai-lambdas\summarizeWorkspace .
 
-aws s3 cp E:\bomb\taskio-ai-lambdas\jwtAuthorizer.zip s3://<artifact-bucket>/lambda/jwtAuthorizer.zip --region us-east-1
-aws s3 cp E:\bomb\taskio-ai-lambdas\askDocsBot.zip s3://<artifact-bucket>/lambda/askDocsBot.zip --region us-east-1
-aws s3 cp E:\bomb\taskio-ai-lambdas\summarizeWorkspace.zip s3://<artifact-bucket>/lambda/summarizeWorkspace.zip --region us-east-1
+aws s3 cp E:\bomb\taskio-ai-lambdas\jwtAuthorizer.zip "s3://$ArtifactBucket/lambda/jwtAuthorizer.zip" --region $Region
+aws s3 cp E:\bomb\taskio-ai-lambdas\askDocsBot.zip "s3://$ArtifactBucket/lambda/askDocsBot.zip" --region $Region
+aws s3 cp E:\bomb\taskio-ai-lambdas\summarizeWorkspace.zip "s3://$ArtifactBucket/lambda/summarizeWorkspace.zip" --region $Region
 ```
 
-### B7. Deploy AI Lambda runtime stack
+### B9. Lambda IAM roles and functions
 
-```bash
-aws cloudformation deploy \
-  --region us-east-1 \
-  --stack-name taskio-w5-ai-api \
-  --template-file w5-cloudformation/cloudformation/w5-ai-api.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides \
-    ProjectName=taskio-w5 \
-    ArtifactBucket=<artifact-bucket> \
-    JwtAuthorizerKey=lambda/jwtAuthorizer.zip \
-    AskDocsBotKey=lambda/askDocsBot.zip \
-    SummarizeWorkspaceKey=lambda/summarizeWorkspace.zip \
-    JwtSecretParameterName=/taskio/jwt-secret \
-    KnowledgeBaseId=<bedrock-kb-id> \
-    ModelArn=<bedrock-model-or-inference-profile-arn> \
-    MongoSecretArn=<mongo-secret-arn>
+Tao IAM roles theo Console section A6 hoac dung policy JSON trong `w5-source/lambdas/iam-policies/`.
+
+Create/update functions:
+
+```powershell
+aws lambda create-function `
+  --region $Region `
+  --function-name "$Project-jwtAuthorizer" `
+  --runtime nodejs20.x `
+  --handler index.handler `
+  --role <authorizer-role-arn> `
+  --code "S3Bucket=$ArtifactBucket,S3Key=lambda/jwtAuthorizer.zip" `
+  --timeout 10 `
+  --memory-size 128
+
+aws lambda create-function `
+  --region $Region `
+  --function-name "$Project-askDocsBot" `
+  --runtime nodejs20.x `
+  --handler index.handler `
+  --role <ai-lambda-role-arn> `
+  --code "S3Bucket=$ArtifactBucket,S3Key=lambda/askDocsBot.zip" `
+  --timeout 30 `
+  --memory-size 512 `
+  --environment "Variables={KNOWLEDGE_BASE_ID=<bedrock-kb-id>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
+
+aws lambda create-function `
+  --region $Region `
+  --function-name "$Project-summarizeWorkspace" `
+  --runtime nodejs20.x `
+  --handler index.handler `
+  --role <ai-lambda-role-arn> `
+  --code "S3Bucket=$ArtifactBucket,S3Key=lambda/summarizeWorkspace.zip" `
+  --timeout 30 `
+  --memory-size 512 `
+  --environment "Variables={MONGO_SECRET_ARN=<mongo-secret-arn>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
 ```
 
-### B8. Deploy REST API + Usage Plan
+### B10. REST API Gateway + Usage Plan
 
 Generate an API key value:
 
@@ -444,35 +648,88 @@ Set-Content -LiteralPath .\ai-rest-api-key.txt -Value $key -Encoding ascii
 
 Deploy:
 
-```bash
-aws cloudformation deploy \
-  --region us-east-1 \
-  --stack-name taskio-w5-ai-rest-api \
-  --template-file w5-cloudformation/cloudformation/w5-ai-rest-api.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides \
-    ProjectName=taskio-w5 \
-    JwtAuthorizerFunctionName=taskio-w5-jwtAuthorizer \
-    AskDocsBotFunctionName=taskio-w5-askDocsBot \
-    SummarizeWorkspaceFunctionName=taskio-w5-summarizeWorkspace \
-    AllowedOrigin=https://taskio.nigga.in.net \
-    ApiKeyValue=<api-key-value> \
-    UsagePlanRateLimit=5 \
-    UsagePlanBurstLimit=10 \
-    MonthlyQuotaLimit=1000
+```powershell
+$ApiId = aws apigateway create-rest-api `
+  --region $Region `
+  --name "$Project-ai-rest-api" `
+  --endpoint-configuration types=REGIONAL `
+  --query "id" `
+  --output text
+
+$RootId = aws apigateway get-resources `
+  --region $Region `
+  --rest-api-id $ApiId `
+  --query "items[?path=='/'].id" `
+  --output text
+
+$AiId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $RootId --path-part ai --query id --output text
+$DocsId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $AiId --path-part docs --query id --output text
+$AskId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $DocsId --path-part ask --query id --output text
+$WorkspacesId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $AiId --path-part workspaces --query id --output text
+$WorkspaceId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $WorkspacesId --path-part "{workspaceId}" --query id --output text
+$SummaryId = aws apigateway create-resource --region $Region --rest-api-id $ApiId --parent-id $WorkspaceId --path-part summary --query id --output text
+
+$AccountId = aws sts get-caller-identity --query Account --output text
+$AuthorizerUri = "arn:aws:apigateway:$Region`:lambda:path/2015-03-31/functions/arn:aws:lambda:$Region`:$AccountId`:function:$Project-jwtAuthorizer/invocations"
+$AuthorizerId = aws apigateway create-authorizer `
+  --region $Region `
+  --rest-api-id $ApiId `
+  --name "$Project-jwt-authorizer" `
+  --type TOKEN `
+  --identity-source method.request.header.Authorization `
+  --authorizer-uri $AuthorizerUri `
+  --query id `
+  --output text
+
+foreach ($ResourceId in @($AskId, $SummaryId)) {
+  aws apigateway put-method `
+    --region $Region `
+    --rest-api-id $ApiId `
+    --resource-id $ResourceId `
+    --http-method POST `
+    --authorization-type CUSTOM `
+    --authorizer-id $AuthorizerId `
+    --api-key-required
+}
+
+$AskUri = "arn:aws:apigateway:$Region`:lambda:path/2015-03-31/functions/arn:aws:lambda:$Region`:$AccountId`:function:$Project-askDocsBot/invocations"
+$SummaryUri = "arn:aws:apigateway:$Region`:lambda:path/2015-03-31/functions/arn:aws:lambda:$Region`:$AccountId`:function:$Project-summarizeWorkspace/invocations"
+
+aws apigateway put-integration --region $Region --rest-api-id $ApiId --resource-id $AskId --http-method POST --type AWS_PROXY --integration-http-method POST --uri $AskUri
+aws apigateway put-integration --region $Region --rest-api-id $ApiId --resource-id $SummaryId --http-method POST --type AWS_PROXY --integration-http-method POST --uri $SummaryUri
+
+aws lambda add-permission --region $Region --function-name "$Project-jwtAuthorizer" --statement-id apigw-authorizer --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:$Region`:$AccountId`:$ApiId/*/*"
+aws lambda add-permission --region $Region --function-name "$Project-askDocsBot" --statement-id apigw-ask --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:$Region`:$AccountId`:$ApiId/*/POST/ai/docs/ask"
+aws lambda add-permission --region $Region --function-name "$Project-summarizeWorkspace" --statement-id apigw-summary --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:$Region`:$AccountId`:$ApiId/*/POST/ai/workspaces/*/summary"
+
+aws apigateway create-deployment --region $Region --rest-api-id $ApiId --stage-name prod
+
+$ApiKeyValue = Get-Content .\ai-rest-api-key.txt
+$ApiKeyId = aws apigateway create-api-key --region $Region --name "$Project-browser-key" --enabled --value $ApiKeyValue --query id --output text
+$UsagePlanId = aws apigateway create-usage-plan `
+  --region $Region `
+  --name "$Project-ai-rest-usage-plan" `
+  --throttle burstLimit=10,rateLimit=5 `
+  --quota limit=1000,period=MONTH `
+  --api-stages "apiId=$ApiId,stage=prod" `
+  --query id `
+  --output text
+aws apigateway create-usage-plan-key --region $Region --usage-plan-id $UsagePlanId --key-id $ApiKeyId --key-type API_KEY
 ```
 
 Get outputs:
 
-```bash
-aws cloudformation describe-stacks \
-  --region us-east-1 \
-  --stack-name taskio-w5-ai-rest-api \
-  --query "Stacks[0].Outputs" \
-  --output table
+```powershell
+"https://$ApiId.execute-api.$Region.amazonaws.com/prod"
 ```
 
-### B9. Update frontend
+Note: CORS `OPTIONS` co the tao bang Console de nhanh hon, hoac bang CLI `put-method/put-integration` mock response. Can allow:
+
+- Origin: `https://taskio.nigga.in.net`
+- Headers: `authorization,content-type,x-api-key`
+- Methods: `POST,OPTIONS`
+
+### B11. Update frontend
 
 Set `.env.production`:
 
@@ -491,7 +748,18 @@ aws s3 cp dist/index.html s3://danhnam-taskio-frontend/index.html --region ap-so
 aws cloudfront create-invalidation --distribution-id E3GXHALT9JVH6U --paths / /index.html
 ```
 
-## 5. Verification commands
+## 5. CloudFormation reference only
+
+Thu muc `w5-cloudformation/` duoc giu lai de team doi chieu resource/config, khong phai deploy path chinh.
+
+Reference files:
+
+- `cloudformation/w5-backend.yaml`: backend ALB, Target Group, Launch Template, ASG, EC2 IAM role, EFS mount in user data.
+- `cloudformation/w5-ai-api.yaml`: Lambda runtime, authorizer, AI lambdas, SQS failure queue.
+- `cloudformation/w5-ai-rest-api.yaml`: REST API Gateway, Lambda authorizer, API Key, Usage Plan, access logs.
+- `cloudformation/w5-foundation.all-in-one.yaml`: all-in-one validation template da dung de test nhanh; file nay tao VPC rieng nen khong dung cho flow chuan voi Terraform foundation.
+
+## 6. Verification commands
 
 Backend:
 
@@ -530,7 +798,7 @@ findmnt /mnt/taskio-shared
 df -h /mnt/taskio-shared
 ```
 
-## 6. Known notes
+## 7. Known notes
 
 - REST API Usage Plan works by API key. In a browser SPA, API key is visible in network/bundle, so it is not a strong secret.
 - API key + Usage Plan is useful for Gateway-level throttling/quota.
@@ -539,6 +807,6 @@ df -h /mnt/taskio-shared
 - Suggested future collection: `aiUsageCounters`.
 - `askDocsBot` currently depends on a valid Bedrock Knowledge Base ID. If KB ID is missing/deleted, gateway/auth layer works but Lambda returns internal error.
 
-## 7. Recommended message to team
+## 8. Recommended message to team
 
-Repo nay la buoc network foundation bang Terraform. Sau khi VPC/Peering xong, team deploy expanded W5 layer bang CloudFormation/CLI hoac thao tac console. Current production da migrate AI tu HTTP API sang REST API de co API Key + Usage Plan. Backend chay EC2 private subnet sau ALB, EFS dung lam shared temporary storage cho workspace export.
+Repo nay la buoc network foundation bang Terraform. Sau khi VPC/Peering xong, team deploy expanded W5 layer bang AWS Console hoac AWS CLI, khong lay CloudFormation lam path chinh. CloudFormation chi giu lai de tham khao resource/config. Current production da migrate AI tu HTTP API sang REST API de co API Key + Usage Plan. Backend chay EC2 private subnet sau ALB, EFS dung lam shared temporary storage cho workspace export.
