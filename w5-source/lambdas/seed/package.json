@@ -1,0 +1,13 @@
+{
+  "name": "taskio-seed",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "seed": "node seed-demo-data.mjs"
+  },
+  "dependencies": {
+    "mongodb": "^6.9.0",
+    "bcryptjs": "^2.4.3"
+  }
+}

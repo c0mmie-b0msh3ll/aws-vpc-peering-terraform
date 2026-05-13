@@ -1,4 +1,7 @@
 .terraform/
+node_modules/
+build/
+dist/
 *.tfstate
 *.tfstate.*
 *.tfplan
@@ -6,5 +9,7 @@ crash.log
 crash.*.log
 *.zip
 *.env
+.env
+.env.production
 *.pem
 ai-rest-api-key.txt

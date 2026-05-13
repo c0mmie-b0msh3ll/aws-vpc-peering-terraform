@@ -1,0 +1,304 @@
+<mxfile host="Electron" version="29.6.1">
+  <diagram name="Taskio-AWS-Week1" id="taskio-aws-week1">
+    <mxGraphModel dx="2400" dy="1600" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="2400" pageHeight="1500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ TITLE BLOCK ============ -->
+        <mxCell id="title-group" connectable="0" style="group;fontFamily=Helvetica;" value="" vertex="1" parent="1">
+          <mxGeometry x="50" y="30" width="2300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="title-text" style="text;html=1;resizable=1;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=30;fontStyle=1;fontFamily=Helvetica;" value="Taskio — AWS Architecture (Week 1)" vertex="1" parent="title-group">
+          <mxGeometry width="1400" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle-text" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=15;fontFamily=Helvetica;" value="Trello-like SPA deployed to AWS Free Tier — EC2 + DynamoDB + S3 + Amplify Hosting — single-AZ, ~$1/month" vertex="1" parent="title-group">
+          <mxGeometry x="5" y="42" width="2000" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="title-separator" style="line;strokeWidth=2;html=1;fontSize=14;strokeColor=#FF9900;fontFamily=Helvetica;" value="" vertex="1" parent="title-group">
+          <mxGeometry x="5" y="74" width="2280" height="10" as="geometry" />
+        </mxCell>
+
+        <!-- ============ USERS CONTAINER ============ -->
+        <mxCell id="users-container" style="fillColor=#f5f5f5;strokeColor=light-dark(#666666,#D4D4D4);rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#333333;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1;" value="End Users&#xa;(Vietnam)" vertex="1" parent="1">
+          <mxGeometry x="80" y="620" width="130" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="users-icon" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#232F3D;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.users;fontFamily=Helvetica;" value="" vertex="1" parent="users-container">
+          <mxGeometry x="40" y="50" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ============ AWS CLOUD BOUNDARY ============ -->
+        <mxCell id="aws-cloud" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud_alt;strokeColor=#232F3E;fillColor=light-dark(#232F3E0D,#232F3E0D);verticalAlign=top;align=left;spacingLeft=30;fontColor=#232F3E;dashed=0;fillStyle=auto;fontFamily=Helvetica;" value="AWS Cloud" vertex="1" parent="1">
+          <mxGeometry x="260" y="170" width="2100" height="1280" as="geometry" />
+        </mxCell>
+
+        <!-- ============ ROUTE 53 (global) ============ -->
+        <mxCell id="grp-route53" style="fillColor=#EDE7F6;strokeColor=#8C4FFF;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#8C4FFF;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="DNS" vertex="1" parent="1">
+          <mxGeometry x="320" y="230" width="140" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-route53" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;fontFamily=Helvetica;shadow=1;" value="Route 53&lt;div&gt;&lt;i&gt;app.taskio.com&lt;br&gt;api.taskio.com&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-route53">
+          <mxGeometry x="46" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ============ AMPLIFY HOSTING (global) ============ -->
+        <mxCell id="grp-amplify" style="fillColor=#FFEBEE;strokeColor=#DD344C;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#DD344C;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Frontend Hosting + CI/CD" vertex="1" parent="1">
+          <mxGeometry x="500" y="230" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-amplify" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.amplify;fontFamily=Helvetica;shadow=1;" value="AWS Amplify Hosting&lt;div&gt;&lt;i&gt;GitHub → build → CDN&lt;br&gt;React SPA, auto-HTTPS&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-amplify">
+          <mxGeometry x="76" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ============ REGION CONTAINER ============ -->
+        <mxCell id="region-sg1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_region;strokeColor=#00A4A6;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#00A4A6;dashed=1;fillStyle=auto;fontFamily=Helvetica;" value="Region: ap-southeast-1 (Singapore)" vertex="1" parent="1">
+          <mxGeometry x="300" y="400" width="2020" height="1010" as="geometry" />
+        </mxCell>
+
+        <!-- ============ REGIONAL MANAGED SERVICES (top row inside region) ============ -->
+        <!-- DynamoDB -->
+        <mxCell id="grp-dynamodb" style="fillColor=#F3E5F5;strokeColor=#C925D1;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#C925D1;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Database (NoSQL)" vertex="1" parent="1">
+          <mxGeometry x="1420" y="460" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-dynamodb" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fontFamily=Helvetica;shadow=1;" value="DynamoDB&lt;div&gt;&lt;i&gt;Users, Boards,&lt;br&gt;BoardMembers&lt;br&gt;Always Free tier&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-dynamodb">
+          <mxGeometry x="76" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- S3 -->
+        <mxCell id="grp-s3" style="fillColor=#E8F5E9;strokeColor=#7AA116;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#7AA116;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Object Storage" vertex="1" parent="1">
+          <mxGeometry x="1660" y="460" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-s3" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fontFamily=Helvetica;shadow=1;" value="S3 — taskio-uploads&lt;div&gt;&lt;i&gt;attachments + avatars&lt;br&gt;pre-signed URL uploads&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-s3">
+          <mxGeometry x="76" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- CloudWatch -->
+        <mxCell id="grp-cw" style="fillColor=#FCE4EC;strokeColor=#E7157B;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#E7157B;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Monitoring" vertex="1" parent="1">
+          <mxGeometry x="1900" y="460" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-cw" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;fontFamily=Helvetica;shadow=1;" value="CloudWatch&lt;div&gt;&lt;i&gt;Logs + Alarms&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-cw">
+          <mxGeometry x="66" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- SSM Parameter Store -->
+        <mxCell id="grp-ssm" style="fillColor=#FCE4EC;strokeColor=#E7157B;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#E7157B;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Secrets" vertex="1" parent="1">
+          <mxGeometry x="2100" y="460" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-ssm" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;fontFamily=Helvetica;shadow=1;" value="SSM Parameter Store&lt;div&gt;&lt;i&gt;JWT_SECRET etc.&lt;br&gt;KMS-encrypted&lt;/i&gt;&lt;/div&gt;" vertex="1" parent="grp-ssm">
+          <mxGeometry x="76" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- IAM Role -->
+        <mxCell id="grp-iam" style="fillColor=#FFEBEE;strokeColor=#DD344C;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#DD344C;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Identity" vertex="1" parent="1">
+          <mxGeometry x="1420" y="630" width="880" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-iam" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.iam;fontFamily=Helvetica;shadow=1;" value="IAM Role: EC2TaskioRole" vertex="1" parent="grp-iam">
+          <mxGeometry x="40" y="25" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="iam-desc" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;fontColor=#333333;" value="&lt;b&gt;Attached to EC2 instance.&lt;/b&gt; Grants scoped permissions:&lt;br&gt;• &lt;b&gt;dynamodb:*&lt;/b&gt; on Taskio tables only (least privilege)&lt;br&gt;• &lt;b&gt;s3:GetObject/PutObject&lt;/b&gt; on taskio-uploads only&lt;br&gt;• &lt;b&gt;ssm:GetParameter&lt;/b&gt; on /taskio/prod/* only&lt;br&gt;• &lt;b&gt;logs:*&lt;/b&gt; on /aws/ec2/taskio/* only&lt;br&gt;&lt;i&gt;No access keys in code. SDK fetches temporary credentials from instance metadata.&lt;/i&gt;" vertex="1" parent="grp-iam">
+          <mxGeometry x="120" y="20" width="740" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- ============ AZ CONTAINER ============ -->
+        <mxCell id="az-sg1a" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_availability_zone;strokeColor=#147EBA;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=1;fillStyle=auto;fontFamily=Helvetica;" value="Availability Zone: ap-southeast-1a" vertex="1" parent="1">
+          <mxGeometry x="340" y="810" width="1060" height="560" as="geometry" />
+        </mxCell>
+
+        <!-- ============ VPC CONTAINER ============ -->
+        <mxCell id="vpc-box" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#8C4FFF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#AB7BE8;dashed=0;fillStyle=auto;fontFamily=Helvetica;" value="VPC: 10.0.0.0/16" vertex="1" parent="1">
+          <mxGeometry x="380" y="860" width="980" height="490" as="geometry" />
+        </mxCell>
+
+        <!-- Internet Gateway -->
+        <mxCell id="grp-igw" style="fillColor=#EDE7F6;strokeColor=#8C4FFF;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=11;fontColor=#8C4FFF;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Internet Gateway" vertex="1" parent="vpc-box">
+          <mxGeometry x="40" y="60" width="140" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-igw" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=9;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.internet_gateway;fontFamily=Helvetica;shadow=1;" value="IGW" vertex="1" parent="grp-igw">
+          <mxGeometry x="46" y="20" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ============ PUBLIC SUBNET ============ -->
+        <mxCell id="public-subnet" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_subnet;strokeColor=#7AA116;fillColor=light-dark(#E9F3E6,#E9F3E622);verticalAlign=top;align=left;spacingLeft=30;fontColor=#248814;dashed=0;fillStyle=auto;fontFamily=Helvetica;fontStyle=1;" value="Public Subnet — 10.0.1.0/24" vertex="1" parent="vpc-box">
+          <mxGeometry x="200" y="60" width="750" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- Security Group inside public subnet -->
+        <mxCell id="grp-sg" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;strokeColor=#DD344C;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#DD344C;dashed=0;fillStyle=auto;fontFamily=Helvetica;" value="sg-ec2-taskio" vertex="1" parent="public-subnet">
+          <mxGeometry x="40" y="55" width="340" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 instance inside SG -->
+        <mxCell id="grp-ec2" style="fillColor=#FFF3E0;strokeColor=#ED7100;rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=11;fontColor=#ED7100;fontFamily=Helvetica;container=1;collapsible=0;shadow=1;strokeWidth=1.5;" value="Compute" vertex="1" parent="grp-sg">
+          <mxGeometry x="30" y="40" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-ec2" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;fontFamily=Helvetica;shadow=1;" value="EC2 t3.micro" vertex="1" parent="grp-ec2">
+          <mxGeometry x="20" y="22" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ec2-desc" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Helvetica;fontColor=#333333;" value="&lt;b&gt;Node.js monolith&lt;/b&gt;&lt;br&gt;Express + Socket.io&lt;br&gt;Nginx (TLS :443 → :3001)&lt;br&gt;Elastic IP + systemd" vertex="1" parent="grp-ec2">
+          <mxGeometry x="90" y="15" width="170" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- SG rules label -->
+        <mxCell id="sg-rules" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Helvetica;fontColor=#DD344C;fontStyle=2;" value="inbound: 443/tcp from 0.0.0.0/0 (HTTPS), 22/tcp from admin IP" vertex="1" parent="public-subnet">
+          <mxGeometry x="40" y="182" width="340" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Public subnet route label -->
+        <mxCell id="pub-route-label" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Helvetica;fontColor=#248814;fontStyle=2;" value="route table: 0.0.0.0/0 → IGW (internet reachable)" vertex="1" parent="public-subnet">
+          <mxGeometry x="400" y="80" width="320" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pub-contents-note" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Helvetica;fontColor=#555555;" value="• EC2 is in public subnet because it needs inbound HTTPS from users and outbound internet for OS updates &amp; npm.&lt;br&gt;• Access is restricted by the Security Group, not by subnet routing. Public subnet ≠ &quot;anyone can reach it&quot;." vertex="1" parent="public-subnet">
+          <mxGeometry x="400" y="110" width="330" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ============ PRIVATE SUBNET (empty, reserved) ============ -->
+        <mxCell id="private-subnet" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_subnet;strokeColor=#147EBA;fillColor=light-dark(#E6F2F8,#E6F2F822);verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=1;fillStyle=auto;fontFamily=Helvetica;fontStyle=1;" value="Private Subnet — 10.0.11.0/24" vertex="1" parent="vpc-box">
+          <mxGeometry x="200" y="300" width="750" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="private-reserved" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontFamily=Helvetica;fontColor=#555555;fontStyle=2;" value="(reserved for future cache / database tier)&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;no IGW route — unreachable from internet&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;route table: local only&lt;/span&gt;" vertex="1" parent="private-subnet">
+          <mxGeometry x="40" y="55" width="670" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ============ EDGES (traffic flow) ============ -->
+
+        <!-- Users → Route 53 -->
+        <mxCell id="edge-user-route53" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#232F3E;strokeWidth=2;fontSize=11;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="users-container" target="grp-route53">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="270" y="295" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-user-route53-label" value="DNS lookup&#xa;app.taskio.com / api.taskio.com" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontFamily=Helvetica;fontColor=#232F3E;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-user-route53">
+          <mxGeometry x="-0.2" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Route53 → Amplify (SPA delivery) -->
+        <mxCell id="edge-route53-amplify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#8C4FFF;strokeWidth=2;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-route53" target="grp-amplify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-r53-amp-label" value="app.taskio.com → SPA" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#8C4FFF;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-route53-amplify">
+          <mxGeometry x="-0.1" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Route53 → EC2 (API delivery) -->
+        <mxCell id="edge-route53-ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#8C4FFF;strokeWidth=2;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-route53" target="grp-igw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="920" />
+              <mxPoint x="490" y="920" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-r53-ec2-label" value="api.taskio.com → Elastic IP" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#8C4FFF;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-route53-ec2">
+          <mxGeometry x="-0.5" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- IGW → EC2 (HTTPS) -->
+        <mxCell id="edge-igw-ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#232F3E;strokeWidth=2;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-igw" target="grp-ec2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-igw-ec2-label" value="HTTPS :443" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#232F3E;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-igw-ec2">
+          <mxGeometry x="-0.2" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 → DynamoDB -->
+        <mxCell id="edge-ec2-ddb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#C925D1;strokeWidth=2;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=classic;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-ec2" target="grp-dynamodb">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1520" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-ec2-ddb-label" value="AWS SDK&#xa;(IAM role auth)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#C925D1;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-ec2-ddb">
+          <mxGeometry x="-0.3" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 → S3 -->
+        <mxCell id="edge-ec2-s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#7AA116;strokeWidth=2;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=classic;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-ec2" target="grp-s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1760" y="970" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-ec2-s3-label" value="presign URL&#xa;+ put object metadata" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#7AA116;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-ec2-s3">
+          <mxGeometry x="-0.3" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Browser → S3 (direct upload) -->
+        <mxCell id="edge-user-s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7AA116;strokeWidth=1.5;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;dashed=1;dashPattern=4 4;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="users-container" target="grp-s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="145" y="100" />
+              <mxPoint x="1640" y="100" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-user-s3-label" value="direct upload via pre-signed URL" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#7AA116;fontStyle=2;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-user-s3">
+          <mxGeometry x="-0.3" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 → CloudWatch -->
+        <mxCell id="edge-ec2-cw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#E7157B;strokeWidth=1.5;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="grp-ec2" target="grp-cw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1990" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-ec2-cw-label" value="logs + metrics" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#E7157B;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-ec2-cw">
+          <mxGeometry x="-0.3" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 → SSM (at startup) -->
+        <mxCell id="edge-ec2-ssm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#E7157B;strokeWidth=1.5;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;labelBackgroundColor=#ffffff;dashed=1;dashPattern=2 2;" edge="1" parent="1" source="grp-ec2" target="grp-ssm">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2200" y="1000" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-ec2-ssm-label" value="fetch secrets at startup" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#E7157B;fontStyle=2;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-ec2-ssm">
+          <mxGeometry x="-0.3" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GitHub → Amplify (CI/CD) -->
+        <mxCell id="github-badge" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fontStyle=1;fontColor=#ffffff;fontFamily=Helvetica;fillColor=#24292E;strokeColor=#24292E;shadow=1;" value="GitHub&#xa;taskio-web" vertex="1" parent="1">
+          <mxGeometry x="500" y="130" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-github-amplify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#24292E;strokeWidth=1.5;fontSize=10;fontFamily=Helvetica;endArrow=classic;startArrow=none;dashed=1;dashPattern=4 4;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="github-badge" target="grp-amplify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-github-amp-label" value="webhook: build + deploy" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontFamily=Helvetica;fontColor=#24292E;fontStyle=2;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="edge-github-amplify">
+          <mxGeometry x="-0.2" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ============ LEGEND / SIDEBAR ============ -->
+        <mxCell id="legend-box" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#CCCCCC;strokeWidth=1;shadow=1;fontFamily=Helvetica;" value="" vertex="1" parent="1">
+          <mxGeometry x="60" y="840" width="200" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=13;fontFamily=Helvetica;fontColor=#232F3E;fontStyle=1;" value="Rubric Mapping" vertex="1" parent="legend-box">
+          <mxGeometry x="12" y="12" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-sep" style="line;strokeWidth=1.5;html=1;strokeColor=#FF9900;fontFamily=Helvetica;" value="" vertex="1" parent="legend-box">
+          <mxGeometry x="12" y="32" width="180" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-body" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Helvetica;fontColor=#333333;" value="&lt;b&gt;B.1 Compute&lt;/b&gt; (5đ)&lt;br&gt;EC2 t3.micro — Node monolith&lt;br&gt;&lt;br&gt;&lt;b&gt;B.2 Database&lt;/b&gt; (5đ)&lt;br&gt;DynamoDB — NoSQL, Always Free&lt;br&gt;&lt;br&gt;&lt;b&gt;B.3 Storage&lt;/b&gt; (5đ)&lt;br&gt;S3 — attachments, avatars&lt;br&gt;&lt;br&gt;&lt;b&gt;B.4 Network&lt;/b&gt; (5đ)&lt;br&gt;VPC + Public/Private Subnet&lt;br&gt;+ IGW + Security Group&lt;br&gt;(no ELB — rubric says optional)&lt;br&gt;&lt;br&gt;&lt;b&gt;B.5 Security&lt;/b&gt; (5đ)&lt;br&gt;IAM Role (no access keys)&lt;br&gt;+ Shared Responsibility&lt;br&gt;&lt;br&gt;&lt;b&gt;B.6 Region/AZ&lt;/b&gt; (3đ)&lt;br&gt;ap-southeast-1, AZ 1a&lt;br&gt;&lt;br&gt;&lt;b&gt;B.7 Cost&lt;/b&gt; (2đ)&lt;br&gt;~$0–1/mo Year 1&lt;br&gt;~$11/mo Year 2+" vertex="1" parent="legend-box">
+          <mxGeometry x="12" y="48" width="180" height="470" as="geometry" />
+        </mxCell>
+
+        <!-- ============ NOTES BOX (bottom) ============ -->
+        <mxCell id="notes-box" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#FFB300;strokeWidth=1;shadow=1;fontFamily=Helvetica;" value="" vertex="1" parent="1">
+          <mxGeometry x="300" y="1380" width="2020" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="notes-title" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=12;fontFamily=Helvetica;fontColor=#F57C00;fontStyle=1;" value="⚠ Deliberate omissions (Week 1 scope) — have answers ready if asked:" vertex="1" parent="notes-box">
+          <mxGeometry x="15" y="10" width="1000" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="notes-body" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Helvetica;fontColor=#333333;" value="&lt;b&gt;No ALB / ASG&lt;/b&gt; — $16/mo, not Free Tier. Single EC2 accepted for Week 1. Upgrade path: ASG + ALB across 2 AZs.  &amp;nbsp; &lt;b&gt;No Cognito&lt;/b&gt; — Taskio already has custom JWT auth in JwtProvider.js.&lt;br&gt;&lt;b&gt;No CloudFront&lt;/b&gt; — Amplify Hosting includes a CDN for the SPA. &amp;nbsp; &lt;b&gt;No WAF / Secrets Manager / ElastiCache&lt;/b&gt; — cost vs Week 1 scope. &amp;nbsp; &lt;b&gt;DynamoDB vs MongoDB&lt;/b&gt; — requires one-time repo/ folder rewrite, accepted for $0/mo DB.&lt;br&gt;&lt;b&gt;Single AZ&lt;/b&gt; — acknowledged trade-off. If ap-southeast-1a fails, ~10 min manual recovery. Multi-AZ is the documented next step." vertex="1" parent="notes-box">
+          <mxGeometry x="15" y="30" width="1990" height="55" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

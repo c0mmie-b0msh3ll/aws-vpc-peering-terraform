@@ -1,0 +1,19 @@
+{
+  "name": "taskio-docs-kb",
+  "roleArn": "arn:aws:iam::641599642578:role/taskio-bedrock-kb-role",
+  "knowledgeBaseConfiguration": {
+    "type": "VECTOR",
+    "vectorKnowledgeBaseConfiguration": {
+      "embeddingModelArn": "arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0",
+      "embeddingModelConfiguration": {
+        "bedrockEmbeddingModelConfiguration": { "dimensions": 1024 }
+      }
+    }
+  },
+  "storageConfiguration": {
+    "type": "S3_VECTORS",
+    "s3VectorsConfiguration": {
+      "indexArn": "arn:aws:s3vectors:us-west-2:641599642578:bucket/taskio-kb-vectors-641599642578/index/taskio-docs-index"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+name: taskio-redis
+
+services:
+  redis-cache:
+    image: redis:7.2-alpine
+    container_name: taskio-redis-cache
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_cache_data:/data
+    command: redis-server --appendonly yes --requirepass 123456
+
+  redis-realtime:
+    image: redis:7.2-alpine
+    container_name: taskio-redis-realtime
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis_realtime_data:/data
+    command: redis-server --appendonly yes --requirepass 123456
+
+volumes:
+  redis_cache_data:
+  redis_realtime_data:

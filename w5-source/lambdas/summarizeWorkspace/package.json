@@ -1,0 +1,14 @@
+{
+  "name": "taskio-summarize-workspace",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "node --test ./test/*.test.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.600.0",
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "mongodb": "^6.9.0"
+  }
+}

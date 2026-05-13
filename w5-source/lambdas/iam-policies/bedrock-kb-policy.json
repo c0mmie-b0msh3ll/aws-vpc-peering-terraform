@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::taskio-ai-docs-641599642578-us-west-2",
+        "arn:aws:s3:::taskio-ai-docs-641599642578-us-west-2/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:QueryVectors", "s3vectors:DeleteVectors", "s3vectors:ListVectors"],
+      "Resource": "arn:aws:s3vectors:us-west-2:641599642578:bucket/bedrock-knowledge-base-qpozoc/*"
+    }
+  ]
+}
