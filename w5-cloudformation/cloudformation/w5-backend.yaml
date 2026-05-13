@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TaskIO W5 backend - ALB, EC2 Auto Scaling, SSM-managed app env, and EFS mount.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: taskio-w5
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  AppPrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  AlbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  AppSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  EfsFileSystemId:
+    Type: String
+  ArtifactBucket:
+    Type: String
+  ArtifactKey:
+    Type: String
+    Default: backend/taskio-api.zip
+  EnvParameterName:
+    Type: String
+    Default: /taskio/w5/api-env
+  InstanceType:
+    Type: String
+    Default: t3.small
+  DesiredCapacity:
+    Type: Number
+    Default: 1
+  MinSize:
+    Type: Number
+    Default: 1
+  MaxSize:
+    Type: Number
+    Default: 2
+  ApiPort:
+    Type: Number
+    Default: 8017
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ec2/${ProjectName}/backend
+      RetentionInDays: 14
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-backend-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: BackendRuntimeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub arn:aws:s3:::${ArtifactBucket}/${ArtifactKey}
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${EnvParameterName}
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: '*'
+
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ProjectName}-backend-profile
+      Roles:
+        - !Ref BackendRole
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-api-tg
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: !Ref ApiPort
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckPath: /api/v1/health
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: '200'
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+
+  BackendLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${ProjectName}-api-alb
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref AlbSecurityGroupId
+      Subnets: !Ref PublicSubnetIds
+
+  BackendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref BackendLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+        config: {}
+    Properties:
+      LaunchTemplateName: !Sub ${ProjectName}-backend-lt
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt BackendInstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref AppSecurityGroupId
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            exec > >(tee -a /var/log/taskio-backend-user-data.log) 2>&1
+
+            dnf update -y
+            dnf install -y nodejs npm amazon-efs-utils unzip awscli redis6
+
+            mkdir -p /etc/redis /var/lib/redis
+
+            cat > /etc/redis/redis-cache.conf <<'REDIS_CACHE'
+            bind 127.0.0.1
+            protected-mode yes
+            port 6379
+            daemonize no
+            supervised systemd
+            requirepass 123456
+            dir /var/lib/redis
+            REDIS_CACHE
+
+            cat > /etc/redis/redis-realtime.conf <<'REDIS_REALTIME'
+            bind 127.0.0.1
+            protected-mode yes
+            port 6380
+            daemonize no
+            supervised systemd
+            requirepass 123456
+            dir /var/lib/redis
+            REDIS_REALTIME
+
+            cat > /etc/systemd/system/redis-cache.service <<'REDIS_CACHE_UNIT'
+            [Unit]
+            Description=TaskIO Redis cache
+            After=network.target
+
+            [Service]
+            Type=notify
+            ExecStart=/usr/bin/redis6-server /etc/redis/redis-cache.conf --supervised systemd --daemonize no
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            REDIS_CACHE_UNIT
+
+            cat > /etc/systemd/system/redis-realtime.service <<'REDIS_REALTIME_UNIT'
+            [Unit]
+            Description=TaskIO Redis realtime
+            After=network.target
+
+            [Service]
+            Type=notify
+            ExecStart=/usr/bin/redis6-server /etc/redis/redis-realtime.conf --supervised systemd --daemonize no
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            REDIS_REALTIME_UNIT
+
+            systemctl daemon-reload
+            systemctl enable --now redis-cache redis-realtime
+
+            mkdir -p /mnt/taskio-shared
+            if ! grep -q "${EfsFileSystemId}:/" /etc/fstab; then
+              echo "${EfsFileSystemId}:/ /mnt/taskio-shared efs _netdev,tls 0 0" >> /etc/fstab
+            fi
+            mount -a
+            mkdir -p /mnt/taskio-shared/exports
+            chown -R ec2-user:ec2-user /mnt/taskio-shared
+
+            mkdir -p /opt/taskio-api
+            aws s3 cp "s3://${ArtifactBucket}/${ArtifactKey}" /tmp/taskio-api.zip --region ${AWS::Region}
+            rm -rf /opt/taskio-api/*
+            unzip -q /tmp/taskio-api.zip -d /opt/taskio-api
+            aws ssm get-parameter --name "${EnvParameterName}" --with-decryption --query Parameter.Value --output text --region ${AWS::Region} > /opt/taskio-api/.env
+            chown -R ec2-user:ec2-user /opt/taskio-api
+
+            cd /opt/taskio-api
+            sudo -u ec2-user npm ci
+            sudo -u ec2-user npm run build
+
+            cat > /etc/systemd/system/taskio-api.service <<'UNIT'
+            [Unit]
+            Description=TaskIO API
+            After=network-online.target remote-fs.target
+            Wants=network-online.target
+
+            [Service]
+            Type=simple
+            User=ec2-user
+            WorkingDirectory=/opt/taskio-api
+            ExecStart=/usr/bin/node /opt/taskio-api/build/src/server.js
+            Restart=always
+            RestartSec=5
+            Environment=NODE_ENV=production
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            systemctl daemon-reload
+            systemctl enable taskio-api
+            systemctl restart taskio-api
+
+  BackendAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${ProjectName}-backend-asg
+      VPCZoneIdentifier: !Ref AppPrivateSubnetIds
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 900
+      TargetGroupARNs:
+        - !Ref BackendTargetGroup
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BackendLaunchTemplate
+        Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-backend
+          PropagateAtLaunch: true
+
+Outputs:
+  BackendAlbDnsName:
+    Value: !GetAtt BackendLoadBalancer.DNSName
+  BackendAlbArn:
+    Value: !Ref BackendLoadBalancer
+  BackendTargetGroupArn:
+    Value: !Ref BackendTargetGroup
+  BackendAutoScalingGroupName:
+    Value: !Ref BackendAutoScalingGroup

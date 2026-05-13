@@ -1,0 +1,628 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TaskIO W5 foundation - VPC peering, Flow Logs, Network Firewall, EFS, and AWS Backup.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: taskio-w5
+  AppVpcCidr:
+    Type: String
+    Default: 10.50.0.0/16
+  PeerVpcCidr:
+    Type: String
+    Default: 10.60.0.0/16
+  BackupTagKey:
+    Type: String
+    Default: Backup
+  BackupTagValue:
+    Type: String
+    Default: W5Daily
+
+Resources:
+  AppVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref AppVpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-vpc
+
+  PeerVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref PeerVpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-peer-vpc
+
+  AppIgw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-igw
+
+  AppIgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref AppIgw
+      VpcId: !Ref AppVpc
+
+  PublicSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-a
+
+  PublicSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-b
+
+  FirewallSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-firewall-a
+
+  FirewallSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-firewall-b
+
+  AppPrivateSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.20.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-private-a
+
+  AppPrivateSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.21.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-private-b
+
+  DbPrivateSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.30.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db-private-a
+
+  DbPrivateSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.50.31.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db-private-b
+
+  PeerPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PeerVpc
+      CidrBlock: 10.60.20.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-peer-private-a
+
+  PublicRouteTableAz1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-rt-a
+
+  PublicRouteTableAz2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-rt-b
+
+  PublicDefaultRouteAz1:
+    Type: AWS::EC2::Route
+    DependsOn: AppIgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTableAz1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref AppIgw
+
+  PublicDefaultRouteAz2:
+    Type: AWS::EC2::Route
+    DependsOn: AppIgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTableAz2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref AppIgw
+
+  PublicSubnetRouteTableAssociationAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTableAz1
+      SubnetId: !Ref PublicSubnetAz1
+
+  PublicSubnetRouteTableAssociationAz2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTableAz2
+      SubnetId: !Ref PublicSubnetAz2
+
+  NatEipAz1:
+    Type: AWS::EC2::EIP
+    DependsOn: AppIgwAttachment
+    Properties:
+      Domain: vpc
+
+  NatEipAz2:
+    Type: AWS::EC2::EIP
+    DependsOn: AppIgwAttachment
+    Properties:
+      Domain: vpc
+
+  NatGatewayAz1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipAz1.AllocationId
+      SubnetId: !Ref PublicSubnetAz1
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-nat-a
+
+  NatGatewayAz2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipAz2.AllocationId
+      SubnetId: !Ref PublicSubnetAz2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-nat-b
+
+  FirewallRouteTableAz1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-firewall-rt-a
+
+  FirewallRouteTableAz2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-firewall-rt-b
+
+  FirewallDefaultRouteAz1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableAz1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayAz1
+
+  FirewallDefaultRouteAz2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableAz2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayAz2
+
+  FirewallSubnetRouteTableAssociationAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableAz1
+      SubnetId: !Ref FirewallSubnetAz1
+
+  FirewallSubnetRouteTableAssociationAz2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableAz2
+      SubnetId: !Ref FirewallSubnetAz2
+
+  AppPrivateRouteTableAz1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-private-rt-a
+
+  AppPrivateRouteTableAz2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-private-rt-b
+
+  AppPrivateSubnetRouteTableAssociationAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AppPrivateRouteTableAz1
+      SubnetId: !Ref AppPrivateSubnetAz1
+
+  AppPrivateSubnetRouteTableAssociationAz2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AppPrivateRouteTableAz2
+      SubnetId: !Ref AppPrivateSubnetAz2
+
+  DbRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db-rt
+
+  DbSubnetRouteTableAssociationAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DbRouteTable
+      SubnetId: !Ref DbPrivateSubnetAz1
+
+  DbSubnetRouteTableAssociationAz2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DbRouteTable
+      SubnetId: !Ref DbPrivateSubnetAz2
+
+  PeerRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PeerVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-peer-rt
+
+  PeerSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PeerRouteTable
+      SubnetId: !Ref PeerPrivateSubnet
+
+  VpcPeering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref AppVpc
+      PeerVpcId: !Ref PeerVpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-peer
+
+  AppToPeerRouteAz1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppPrivateRouteTableAz1
+      DestinationCidrBlock: !Ref PeerVpcCidr
+      VpcPeeringConnectionId: !Ref VpcPeering
+
+  AppToPeerRouteAz2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppPrivateRouteTableAz2
+      DestinationCidrBlock: !Ref PeerVpcCidr
+      VpcPeeringConnectionId: !Ref VpcPeering
+
+  PeerToAppRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PeerRouteTable
+      DestinationCidrBlock: !Ref AppVpcCidr
+      VpcPeeringConnectionId: !Ref VpcPeering
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: TaskIO ALB security group
+      VpcId: !Ref AppVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-alb-sg
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: TaskIO app-tier security group
+      VpcId: !Ref AppVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8017
+          ToPort: 8017
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-app-sg
+
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: TaskIO EFS security group
+      VpcId: !Ref AppVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-efs-sg
+
+  EfsFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      BackupPolicy:
+        Status: ENABLED
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-exports-efs
+        - Key: !Ref BackupTagKey
+          Value: !Ref BackupTagValue
+
+  EfsMountTargetAz1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+      SubnetId: !Ref AppPrivateSubnetAz1
+
+  EfsMountTargetAz2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+      SubnetId: !Ref AppPrivateSubnetAz2
+
+  FirewallAlertLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/network-firewall/${ProjectName}/alert
+      RetentionInDays: 14
+
+  FirewallFlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/network-firewall/${ProjectName}/flow
+      RetentionInDays: 14
+
+  StatefulDomainAllowList:
+    Type: AWS::NetworkFirewall::RuleGroup
+    Properties:
+      Capacity: 100
+      RuleGroupName: !Sub ${ProjectName}-domain-egress
+      Type: STATEFUL
+      RuleGroup:
+        RulesSource:
+          RulesSourceList:
+            GeneratedRulesType: DENYLIST
+            TargetTypes:
+              - TLS_SNI
+              - HTTP_HOST
+            Targets:
+              - example-blocked.invalid
+
+  FirewallPolicy:
+    Type: AWS::NetworkFirewall::FirewallPolicy
+    Properties:
+      FirewallPolicyName: !Sub ${ProjectName}-policy
+      FirewallPolicy:
+        StatelessDefaultActions:
+          - aws:forward_to_sfe
+        StatelessFragmentDefaultActions:
+          - aws:forward_to_sfe
+        StatefulRuleGroupReferences:
+          - ResourceArn: !Ref StatefulDomainAllowList
+
+  NetworkFirewall:
+    Type: AWS::NetworkFirewall::Firewall
+    Properties:
+      FirewallName: !Sub ${ProjectName}-firewall
+      FirewallPolicyArn: !Ref FirewallPolicy
+      VpcId: !Ref AppVpc
+      SubnetMappings:
+        - SubnetId: !Ref FirewallSubnetAz1
+        - SubnetId: !Ref FirewallSubnetAz2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-firewall
+
+  FirewallLogging:
+    Type: AWS::NetworkFirewall::LoggingConfiguration
+    Properties:
+      FirewallArn: !Ref NetworkFirewall
+      LoggingConfiguration:
+        LogDestinationConfigs:
+          - LogType: ALERT
+            LogDestinationType: CloudWatchLogs
+            LogDestination:
+              logGroup: !Ref FirewallAlertLogGroup
+          - LogType: FLOW
+            LogDestinationType: CloudWatchLogs
+            LogDestination:
+              logGroup: !Ref FirewallFlowLogGroup
+
+  FlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/vpc-flow-logs/${ProjectName}
+      RetentionInDays: 14
+
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: flow-logs-write
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  AppVpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      ResourceId: !Ref AppVpc
+      ResourceType: VPC
+      TrafficType: ALL
+
+  PeerVpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      ResourceId: !Ref PeerVpc
+      ResourceType: VPC
+      TrafficType: ALL
+
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: !Sub ${ProjectName}-vault
+
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+
+  BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub ${ProjectName}-daily
+        BackupPlanRule:
+          - RuleName: daily-7-day-retention
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 17 * * ? *)
+            Lifecycle:
+              DeleteAfterDays: 7
+
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref BackupPlan
+      BackupSelection:
+        SelectionName: !Sub ${ProjectName}-tagged-resources
+        IamRoleArn: !GetAtt BackupRole.Arn
+        ListOfTags:
+          - ConditionType: STRINGEQUALS
+            ConditionKey: !Ref BackupTagKey
+            ConditionValue: !Ref BackupTagValue
+
+Outputs:
+  AppVpcId:
+    Value: !Ref AppVpc
+  PeerVpcId:
+    Value: !Ref PeerVpc
+  AppPrivateSubnetAz1:
+    Value: !Ref AppPrivateSubnetAz1
+  AppPrivateSubnetAz2:
+    Value: !Ref AppPrivateSubnetAz2
+  AppPrivateRouteTableAz1:
+    Value: !Ref AppPrivateRouteTableAz1
+  AppPrivateRouteTableAz2:
+    Value: !Ref AppPrivateRouteTableAz2
+  AppPrivateSubnetAz1Name:
+    Value: !GetAtt AppPrivateSubnetAz1.AvailabilityZone
+  AppPrivateSubnetAz2Name:
+    Value: !GetAtt AppPrivateSubnetAz2.AvailabilityZone
+  AppSecurityGroupId:
+    Value: !Ref AppSecurityGroup
+  AlbSecurityGroupId:
+    Value: !Ref AlbSecurityGroup
+  EfsSecurityGroupId:
+    Value: !Ref EfsSecurityGroup
+  EfsFileSystemId:
+    Value: !Ref EfsFileSystem
+  NetworkFirewallName:
+    Value: !Sub ${ProjectName}-firewall
+  NetworkFirewallArn:
+    Value: !Ref NetworkFirewall
+  FirewallAlertLogGroup:
+    Value: !Ref FirewallAlertLogGroup
+  FlowLogGroup:
+    Value: !Ref FlowLogGroup
+  BackupVaultName:
+    Value: !Ref BackupVault

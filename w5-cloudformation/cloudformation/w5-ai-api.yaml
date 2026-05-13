@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TaskIO W5 AI Lambda runtime - Lambda authorizer, AI Lambdas, and async failure handling.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: taskio-w5
+  ArtifactBucket:
+    Type: String
+  JwtAuthorizerKey:
+    Type: String
+  AskDocsBotKey:
+    Type: String
+  SummarizeWorkspaceKey:
+    Type: String
+  JwtSecretParameterName:
+    Type: String
+    Default: /taskio/jwt-secret
+  KnowledgeBaseId:
+    Type: String
+  ModelArn:
+    Type: String
+  MongoSecretArn:
+    Type: String
+Resources:
+  JwtAuthorizerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-jwt-authorizer-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: jwt-authorizer-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-jwtAuthorizer:*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${JwtSecretParameterName}
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+
+  AiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ai-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ai-lambda-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-askDocsBot:*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-summarizeWorkspace:*
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:GetInferenceProfile
+                  - bedrock:Converse
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
+                Resource: '*'
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref MongoSecretArn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt SummarizeFailureQueue.Arn
+
+  SummarizeFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectName}-summarize-failures
+      MessageRetentionPeriod: 1209600
+
+  JwtAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProjectName}-jwtAuthorizer
+      RetentionInDays: 14
+
+  AskDocsBotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProjectName}-askDocsBot
+      RetentionInDays: 14
+
+  SummarizeWorkspaceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProjectName}-summarizeWorkspace
+      RetentionInDays: 14
+
+  JwtAuthorizerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-jwtAuthorizer
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt JwtAuthorizerRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref JwtAuthorizerKey
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          SSM_PARAM: !Ref JwtSecretParameterName
+
+  AskDocsBotFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-askDocsBot
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt AiLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref AskDocsBotKey
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          KB_ID: !Ref KnowledgeBaseId
+          MODEL_ARN: !Ref ModelArn
+
+  SummarizeWorkspaceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-summarizeWorkspace
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt AiLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref SummarizeWorkspaceKey
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          MODEL_ARN: !Ref ModelArn
+          MONGO_SECRET_ARN: !Ref MongoSecretArn
+
+  SummarizeWorkspaceAsyncConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref SummarizeWorkspaceFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt SummarizeFailureQueue.Arn
+
+Outputs:
+  JwtAuthorizerFunctionName:
+    Value: !Ref JwtAuthorizerFunction
+  AskDocsBotFunctionName:
+    Value: !Ref AskDocsBotFunction
+  SummarizeWorkspaceFunctionName:
+    Value: !Ref SummarizeWorkspaceFunction
+  SummarizeFailureQueueUrl:
+    Value: !Ref SummarizeFailureQueue
+  SummarizeFailureQueueArn:
+    Value: !GetAtt SummarizeFailureQueue.Arn
