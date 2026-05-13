@@ -75,7 +75,179 @@ Ly do dung EFS:
 - Khong can sticky session.
 - Khong phu thuoc local disk cua mot EC2 cu the.
 
-## 3. Deploy version A - Manual on AWS Console
+## 3. Runtime config and env wiring
+
+Phan nay la mapping de noi cac service lai voi nhau sau khi deploy. Khong commit file `.env` that vao git.
+
+### 3.1 Outputs can lay sau tung buoc
+
+Terraform network outputs:
+
+- Application VPC ID -> tao ALB/App/EFS security groups.
+- Public subnet IDs -> ALB.
+- Private app subnet IDs -> backend ASG + EFS mount targets.
+- AI VPC/private subnet IDs -> chi can neu Lambda/datastore can chay trong VPC.
+- Route table/VPC Peering outputs -> verify routing giua VPC app va VPC AI.
+
+Backend deploy outputs:
+
+- ALB DNS name -> dung lam origin cho CloudFront `/api/*`.
+- EFS ID -> mount vao backend EC2, user data thay vao `EFS_ID`.
+- App SG ID -> allow EFS inbound NFS `2049`.
+- Backend health URL -> verify `/api/v1/health`.
+
+Bedrock KB outputs:
+
+- Knowledge Base ID -> set vao Lambda `askDocsBot` env `KB_ID`.
+- Model/inference profile ARN -> set vao AI Lambdas env `MODEL_ARN`.
+
+REST API Gateway outputs:
+
+- REST API invoke URL -> set vao frontend `VITE_AI_API_URL`.
+- API key value -> set vao frontend `VITE_AI_API_KEY`.
+- Usage Plan ID/API Key ID -> verify throttle/quota.
+
+CloudFront/frontend outputs:
+
+- Frontend domain -> set backend CORS `CORS_ALLOWED_ORIGINS`.
+- CloudFront distribution ID -> dung de invalidate sau moi lan deploy frontend.
+
+### 3.2 Backend API env
+
+Store backend env trong SSM SecureString, vi du `/taskio/w5/api-env`. EC2 user data pull ve `/opt/taskio-api/.env`.
+
+Minimal production env:
+
+```text
+BUILD_MODE=production
+LOCAL_DEV_APP_HOST=0.0.0.0
+LOCAL_DEV_APP_PORT=8017
+
+MONGODB_URI=<mongodb-uri>
+DATABASE_NAME=taskio
+
+WEBSITE_DOMAIN_PRODUCTION=https://taskio.nigga.in.net
+CORS_ALLOWED_ORIGINS=https://taskio.nigga.in.net,https://<cloudfront-domain>
+
+ACCESS_TOKEN_SECRET_SIGNATURE=<jwt-access-secret>
+ACCESS_TOKEN_LIFE=1d
+REFRESH_TOKEN_SECRET_SIGNATURE=<jwt-refresh-secret>
+REFRESH_TOKEN_LIFE=30d
+AI_TOKEN_LIFE=15m
+
+REDIS_CACHE_HOST=127.0.0.1
+REDIS_CACHE_PORT=6379
+REDIS_CACHE_PASSWORD=
+REDIS_REALTIME_HOST=127.0.0.1
+REDIS_REALTIME_PORT=6380
+REDIS_REALTIME_PASSWORD=
+
+EFS_EXPORT_ROOT=/mnt/taskio-shared/exports
+
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=<app-upload-bucket>
+AWS_CLOUDFRONT_DOMAIN=<asset-cloudfront-domain-if-any>
+
+BEDROCK_REGION=us-east-1
+```
+
+Optional/provider env neu feature dang dung:
+
+```text
+AUTHOR=TaskIO
+EMAIL_USERNAME=<smtp-username>
+EMAIL_PASSWORD=<smtp-password>
+API_KEY_MAIL=<brevo-api-key>
+CLOUDINARY_CLOUD_NAME=<cloudinary-cloud>
+CLOUDINARY_API_KEY=<cloudinary-key>
+CLOUDINARY_API_SECRET=<cloudinary-secret>
+BEDROCK_AWS_ACCESS_KEY_ID=
+BEDROCK_AWS_SECRET_ACCESS_KEY=
+```
+
+Notes:
+
+- Tren EC2 nen uu tien instance profile/IAM role thay vi hardcode `BEDROCK_AWS_ACCESS_KEY_ID` va `BEDROCK_AWS_SECRET_ACCESS_KEY`.
+- `ACCESS_TOKEN_SECRET_SIGNATURE` phai trung voi secret ma Lambda authorizer dung de verify JWT.
+- `CORS_ALLOWED_ORIGINS` phai co frontend domain, neu khong browser se bi CORS.
+
+### 3.3 Lambda env
+
+`jwtAuthorizer`:
+
+```text
+AWS_REGION=us-east-1
+SSM_PARAM=/taskio/w5/jwt-access-secret
+```
+
+SSM param `/taskio/w5/jwt-access-secret` phai co cung gia tri voi backend `ACCESS_TOKEN_SECRET_SIGNATURE`.
+
+`askDocsBot`:
+
+```text
+AWS_REGION=us-west-2
+KB_ID=<bedrock-kb-id>
+MODEL_ARN=<bedrock-retrieve-generate-model-or-inference-profile-arn>
+```
+
+`summarizeWorkspace`:
+
+```text
+AWS_REGION=us-east-1
+MODEL_ARN=<bedrock-converse-model-or-inference-profile-arn>
+MONGO_SECRET_ARN=<secrets-manager-secret-arn>
+```
+
+Mongo secret cho `summarizeWorkspace` nen la Secrets Manager JSON:
+
+```json
+{
+  "uri": "<mongodb-uri>",
+  "database": "taskio"
+}
+```
+
+Notes:
+
+- `askDocsBot` source hien tai doc bien `KB_ID`, khong phai `KNOWLEDGE_BASE_ID`.
+- `MODEL_ARN` co the khac nhau giua chatbot docs va workspace summary tuy model/region team chon.
+- Lambda IAM role can CloudWatch Logs, Bedrock permissions, va SSM/Secrets Manager permissions tuong ung.
+
+### 3.4 Frontend env
+
+File local build: `w5-source/frontend/.env.production`.
+
+```text
+VITE_API_ROOT=https://taskio.nigga.in.net/api
+VITE_AI_API_URL=https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/prod
+VITE_AI_API_KEY=<api-gateway-api-key-value>
+```
+
+Mapping:
+
+- `VITE_API_ROOT` tro ve backend API qua CloudFront/ALB.
+- `VITE_AI_API_URL` tro ve REST API Gateway stage `/prod`.
+- `VITE_AI_API_KEY` la browser API key gan voi Usage Plan.
+
+Note: API key trong SPA khong phai secret manh vi user co the thay trong browser. No dung de Gateway throttle/quota, con auth that van la JWT qua Lambda authorizer.
+
+### 3.5 Config bridge checklist
+
+Truoc khi test end-to-end, check cac diem nay:
+
+- Backend `.env`: `ACCESS_TOKEN_SECRET_SIGNATURE` da set.
+- SSM `/taskio/w5/jwt-access-secret`: cung gia tri voi backend access token secret.
+- Lambda `jwtAuthorizer`: `SSM_PARAM=/taskio/w5/jwt-access-secret`.
+- Bedrock KB da sync docs AI va co `KB_ID`.
+- Lambda `askDocsBot`: co `KB_ID` va `MODEL_ARN`.
+- Lambda `summarizeWorkspace`: co `MODEL_ARN` va `MONGO_SECRET_ARN`.
+- REST API methods: `API Key Required=true`, Custom Authorizer enabled.
+- Usage Plan: da attach API stage va API key.
+- Frontend `.env.production`: co `VITE_API_ROOT`, `VITE_AI_API_URL`, `VITE_AI_API_KEY`.
+- Backend CORS: allow frontend domain.
+- CloudFront: route `/api/*` ve backend ALB, frontend default origin ve S3.
+
+## 4. Deploy version A - Manual on AWS Console
 
 Dung cach nay de demo tung buoc hoac khi mentor muon thay setup tren console.
 
@@ -210,7 +382,7 @@ Tao ASG:
 
 ### A6. Bedrock Knowledge Base for docs chatbot
 
-Buoc nay can lam truoc khi tao/cau hinh `askDocsBot`, vi Lambda can `KNOWLEDGE_BASE_ID`.
+Buoc nay can lam truoc khi tao/cau hinh `askDocsBot`, vi Lambda can `KB_ID`.
 
 Nguon docs AI:
 
@@ -238,7 +410,7 @@ Setup tren AWS Console:
 9. Sync data source.
 10. Test retrieve/query trong Bedrock console.
 11. Ghi lai Knowledge Base ID de set vao Lambda env:
-    - `KNOWLEDGE_BASE_ID=<bedrock-kb-id>`
+    - `KB_ID=<bedrock-kb-id>`
 
 Notes:
 
@@ -338,7 +510,7 @@ aws s3 cp dist/index.html s3://danhnam-taskio-frontend/index.html --region ap-so
 aws cloudfront create-invalidation --distribution-id E3GXHALT9JVH6U --paths / /index.html
 ```
 
-## 4. Deploy version B - AWS CLI without CloudFormation
+## 5. Deploy version B - AWS CLI without CloudFormation
 
 Dung cach nay khi muon deploy repeatable hon Console, nhung van khong dung CloudFormation. CLI commands ben duoi tao resource theo thu tu tuong tu Console.
 
@@ -680,7 +852,7 @@ aws bedrock-agent start-ingestion-job `
 7. Lay Knowledge Base ID va set vao Lambda env:
 
 ```text
-KNOWLEDGE_BASE_ID=<bedrock-kb-id>
+KB_ID=<bedrock-kb-id>
 ```
 
 Note: `w5-source/lambdas/iam-policies/kb-config.json` la reference config. Khong dung y nguyen ARN account cu; thay role ARN, embedding model region, vector index ARN theo environment moi.
@@ -723,7 +895,7 @@ aws lambda create-function `
   --code "S3Bucket=$ArtifactBucket,S3Key=lambda/askDocsBot.zip" `
   --timeout 30 `
   --memory-size 512 `
-  --environment "Variables={KNOWLEDGE_BASE_ID=<bedrock-kb-id>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
+  --environment "Variables={KB_ID=<bedrock-kb-id>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
 
 aws lambda create-function `
   --region $Region `
@@ -848,7 +1020,7 @@ aws s3 cp dist/index.html s3://danhnam-taskio-frontend/index.html --region ap-so
 aws cloudfront create-invalidation --distribution-id E3GXHALT9JVH6U --paths / /index.html
 ```
 
-## 5. CloudFormation reference only
+## 6. CloudFormation reference only
 
 Thu muc `w5-cloudformation/` duoc giu lai de team doi chieu resource/config, khong phai deploy path chinh.
 
@@ -859,7 +1031,7 @@ Reference files:
 - `cloudformation/w5-ai-rest-api.yaml`: REST API Gateway, Lambda authorizer, API Key, Usage Plan, access logs.
 - `cloudformation/w5-foundation.all-in-one.yaml`: all-in-one validation template da dung de test nhanh; file nay tao VPC rieng nen khong dung cho flow chuan voi Terraform foundation.
 
-## 6. Verification commands
+## 7. Verification commands
 
 Backend:
 
@@ -898,7 +1070,7 @@ findmnt /mnt/taskio-shared
 df -h /mnt/taskio-shared
 ```
 
-## 7. Known notes
+## 8. Known notes
 
 - REST API Usage Plan works by API key. In a browser SPA, API key is visible in network/bundle, so it is not a strong secret.
 - API key + Usage Plan is useful for Gateway-level throttling/quota.
@@ -908,6 +1080,6 @@ df -h /mnt/taskio-shared
 - `askDocsBot` currently depends on a valid Bedrock Knowledge Base ID. If KB ID is missing/deleted, gateway/auth layer works but Lambda returns internal error.
 - Bedrock KB docs source is owned by anh Tien in the current team flow; pull those docs before sync/ingestion.
 
-## 8. Recommended message to team
+## 9. Recommended message to team
 
 Repo nay la buoc network foundation bang Terraform. Sau khi VPC/Peering xong, team deploy expanded W5 layer bang AWS Console hoac AWS CLI, khong lay CloudFormation lam path chinh. CloudFormation chi giu lai de tham khao resource/config. Current production da migrate AI tu HTTP API sang REST API de co API Key + Usage Plan. Backend chay EC2 private subnet sau ALB, EFS dung lam shared temporary storage cho workspace export.
