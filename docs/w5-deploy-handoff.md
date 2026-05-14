@@ -101,6 +101,13 @@ Bedrock KB outputs:
 - Knowledge Base ID -> set vao Lambda `askDocsBot` env `KB_ID`.
 - Model/inference profile ARN -> set vao AI Lambdas env `MODEL_ARN`.
 
+DocumentDB outputs:
+
+- Cluster endpoint -> set vao backend `MONGODB_URI`.
+- Cluster port, usually `27017` -> include in URI.
+- DB security group ID -> allow inbound only from App EC2 SG and Lambda SG if Lambda needs DB.
+- DocumentDB secret ARN -> set vao Lambda `summarizeWorkspace` env `MONGO_SECRET_ARN`.
+
 REST API Gateway outputs:
 
 - REST API invoke URL -> set vao frontend `VITE_AI_API_URL`.
@@ -112,7 +119,57 @@ CloudFront/frontend outputs:
 - Frontend domain -> set backend CORS `CORS_ALLOWED_ORIGINS`.
 - CloudFront distribution ID -> dung de invalidate sau moi lan deploy frontend.
 
-### 3.2 Backend API env
+### 3.2 AWS DocumentDB setup
+
+Team dung AWS DocumentDB lam database chinh. DocumentDB khong public ra Internet; dat trong private subnet cua VPC.
+
+Recommended placement:
+
+- VPC: `vpc-application`.
+- Subnets: private subnets across 2 AZ, hoac DB private subnets rieng neu team tao them.
+- Public access: disabled/not applicable.
+- Security group: `documentdb-sg`.
+- Inbound:
+  - TCP `27017` from App EC2 SG.
+  - TCP `27017` from Lambda SG neu `summarizeWorkspace` Lambda attach VPC de doc DB.
+- Outbound: default/allow within VPC.
+
+Manual deploy steps on Console:
+
+1. VPC > Subnet groups/DocumentDB subnet group:
+   - Create subnet group `taskio-w5-docdb-subnet-group`.
+   - Add private subnets in 2 AZ.
+2. EC2 > Security Groups:
+   - Create `taskio-w5-documentdb-sg` in `vpc-application`.
+   - Allow inbound `27017` from backend App EC2 SG.
+   - If Lambda needs direct DocumentDB access, create Lambda SG and allow `27017` from that SG too.
+3. Amazon DocumentDB > Clusters > Create:
+   - Engine: Amazon DocumentDB.
+   - Cluster name: `taskio-w5-docdb`.
+   - Subnet group: `taskio-w5-docdb-subnet-group`.
+   - VPC security group: `taskio-w5-documentdb-sg`.
+   - Instances: at least 1 writer, optional second instance in another AZ for HA.
+   - Encryption at rest: enabled.
+   - Backup retention: enable theo yeu cau project.
+4. Secrets Manager:
+   - Store username/password/URI for app use.
+   - Lambda `summarizeWorkspace` reads this through `MONGO_SECRET_ARN`.
+
+Connection string format:
+
+```text
+MONGODB_URI=mongodb://<username>:<password>@<docdb-cluster-endpoint>:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
+DATABASE_NAME=taskio
+```
+
+Notes:
+
+- DocumentDB requires TLS in normal production setup. Backend/Lambda need Amazon DocumentDB CA bundle, commonly `global-bundle.pem`, available in source/reference.
+- If Lambda reads DocumentDB, it must run inside VPC private subnets that can route to DocumentDB. A Lambda outside VPC cannot reach a private DocumentDB endpoint.
+- If DocumentDB is placed in `vpc-ai` instead of `vpc-application`, ensure VPC peering routes and SG/CIDR rules allow app/Lambda traffic to port `27017`.
+- Frontend never connects to DocumentDB directly. Frontend only talks to backend/API Gateway.
+
+### 3.3 Backend API env
 
 Store backend env trong SSM SecureString, vi du `/taskio/w5/api-env`. EC2 user data pull ve `/opt/taskio-api/.env`.
 
@@ -123,7 +180,7 @@ BUILD_MODE=production
 LOCAL_DEV_APP_HOST=0.0.0.0
 LOCAL_DEV_APP_PORT=8017
 
-MONGODB_URI=<mongodb-uri>
+MONGODB_URI=mongodb://<username>:<password>@<docdb-cluster-endpoint>:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
 DATABASE_NAME=taskio
 
 WEBSITE_DOMAIN_PRODUCTION=https://taskio.nigga.in.net
@@ -171,7 +228,7 @@ Notes:
 - `ACCESS_TOKEN_SECRET_SIGNATURE` phai trung voi secret ma Lambda authorizer dung de verify JWT.
 - `CORS_ALLOWED_ORIGINS` phai co frontend domain, neu khong browser se bi CORS.
 
-### 3.3 Lambda env
+### 3.4 Lambda env
 
 `jwtAuthorizer`:
 
@@ -202,7 +259,7 @@ Mongo secret cho `summarizeWorkspace` nen la Secrets Manager JSON:
 
 ```json
 {
-  "uri": "<mongodb-uri>",
+  "uri": "mongodb://<username>:<password>@<docdb-cluster-endpoint>:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false",
   "database": "taskio"
 }
 ```
@@ -210,10 +267,11 @@ Mongo secret cho `summarizeWorkspace` nen la Secrets Manager JSON:
 Notes:
 
 - `askDocsBot` source hien tai doc bien `KB_ID`, khong phai `KNOWLEDGE_BASE_ID`.
+- `summarizeWorkspace` can VPC config neu doc DocumentDB private endpoint.
 - `MODEL_ARN` co the khac nhau giua chatbot docs va workspace summary tuy model/region team chon.
 - Lambda IAM role can CloudWatch Logs, Bedrock permissions, va SSM/Secrets Manager permissions tuong ung.
 
-### 3.4 Frontend env
+### 3.5 Frontend env
 
 File local build: `w5-source/frontend/.env.production`.
 
@@ -231,16 +289,20 @@ Mapping:
 
 Note: API key trong SPA khong phai secret manh vi user co the thay trong browser. No dung de Gateway throttle/quota, con auth that van la JWT qua Lambda authorizer.
 
-### 3.5 Config bridge checklist
+### 3.6 Config bridge checklist
 
 Truoc khi test end-to-end, check cac diem nay:
 
 - Backend `.env`: `ACCESS_TOKEN_SECRET_SIGNATURE` da set.
+- Backend `.env`: `MONGODB_URI` tro den DocumentDB cluster endpoint private.
+- DocumentDB SG: allow `27017` from App EC2 SG.
 - SSM `/taskio/w5/jwt-access-secret`: cung gia tri voi backend access token secret.
 - Lambda `jwtAuthorizer`: `SSM_PARAM=/taskio/w5/jwt-access-secret`.
 - Bedrock KB da sync docs AI va co `KB_ID`.
 - Lambda `askDocsBot`: co `KB_ID` va `MODEL_ARN`.
 - Lambda `summarizeWorkspace`: co `MODEL_ARN` va `MONGO_SECRET_ARN`.
+- Lambda `summarizeWorkspace`: attach VPC/private subnet + Lambda SG neu can doc DocumentDB private endpoint.
+- DocumentDB SG: allow `27017` from Lambda SG neu Lambda doc DB.
 - REST API methods: `API Key Required=true`, Custom Authorizer enabled.
 - Usage Plan: da attach API stage va API key.
 - Frontend `.env.production`: co `VITE_API_ROOT`, `VITE_AI_API_URL`, `VITE_AI_API_KEY`.
@@ -312,7 +374,33 @@ Export directory:
 /mnt/taskio-shared/exports
 ```
 
-### A4. Backend artifact and environment
+### A4. DocumentDB
+
+Tao DocumentDB truoc backend de backend env co san endpoint.
+
+Console steps ngan gon:
+
+1. Tao DocumentDB subnet group trong private subnets cua `vpc-application`.
+2. Tao `documentdb-sg`, inbound TCP `27017` from App EC2 SG.
+3. Tao DocumentDB cluster `taskio-w5-docdb`, encrypted, subnet group private, SG `documentdb-sg`.
+4. Ghi lai cluster endpoint.
+5. Tao Secrets Manager secret cho Lambda summary:
+
+```json
+{
+  "uri": "mongodb://<username>:<password>@<docdb-cluster-endpoint>:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false",
+  "database": "taskio"
+}
+```
+
+6. Set backend `.env`/SSM:
+
+```text
+MONGODB_URI=mongodb://<username>:<password>@<docdb-cluster-endpoint>:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
+DATABASE_NAME=taskio
+```
+
+### A5. Backend artifact and environment
 
 Tao S3 artifact bucket, upload backend zip:
 
@@ -341,7 +429,7 @@ EFS_EXPORT_ROOT=/mnt/taskio-shared/exports
 CORS_ALLOWED_ORIGINS=https://taskio.nigga.in.net,https://d2kt131o0m9hfi.cloudfront.net
 ```
 
-### A5. Backend EC2/ASG/ALB
+### A6. Backend EC2/ASG/ALB
 
 Tao launch template:
 
@@ -380,7 +468,7 @@ Tao ASG:
 - Desired 1, Min 1, Max 2
 - Attach target group
 
-### A6. Bedrock Knowledge Base for docs chatbot
+### A7. Bedrock Knowledge Base for docs chatbot
 
 Buoc nay can lam truoc khi tao/cau hinh `askDocsBot`, vi Lambda can `KB_ID`.
 
@@ -417,7 +505,7 @@ Notes:
 - Current Lambda `askDocsBot` dang goi Bedrock Knowledge Base, nen neu KB ID sai/mat thi API Gateway/auth van OK nhung chatbot se return error.
 - File `w5-source/lambdas/iam-policies/kb-config.json` chi la config tham khao tu setup hien tai, can thay account/region/resource ARN theo moi truong moi.
 
-### A7. AI Lambdas
+### A8. AI Lambdas
 
 Upload Lambda zips to S3:
 
@@ -449,7 +537,7 @@ IAM:
   - Secrets Manager read Mongo secret
   - SQS SendMessage to failure queue
 
-### A8. REST API Gateway + Usage Plan
+### A9. REST API Gateway + Usage Plan
 
 Create REST API:
 
@@ -491,7 +579,7 @@ CORS:
 - Allow headers: `authorization,content-type,x-api-key`
 - Allow methods: `POST,OPTIONS`
 
-### A9. Frontend deploy
+### A10. Frontend deploy
 
 Set production env:
 
@@ -618,7 +706,74 @@ aws efs create-mount-target `
   --security-groups $EfsSgId
 ```
 
-### B5. Package backend and store env
+### B5. DocumentDB by CLI or Console
+
+DocumentDB co nhieu setting network/secret nen co the tao bang Console cho nhanh. Neu dung CLI, flow toi thieu:
+
+```powershell
+$DocDbSubnetGroup = "$Project-docdb-subnet-group"
+$DocDbSgId = aws ec2 create-security-group `
+  --region $Region `
+  --group-name "$Project-documentdb-sg" `
+  --description "TaskIO W5 DocumentDB" `
+  --vpc-id $AppVpcId `
+  --query "GroupId" `
+  --output text
+
+aws ec2 authorize-security-group-ingress `
+  --region $Region `
+  --group-id $DocDbSgId `
+  --protocol tcp `
+  --port 27017 `
+  --source-group $AppSgId
+
+aws docdb create-db-subnet-group `
+  --region $Region `
+  --db-subnet-group-name $DocDbSubnetGroup `
+  --db-subnet-group-description "TaskIO W5 DocumentDB private subnets" `
+  --subnet-ids $PrivateSubnetA $PrivateSubnetB
+
+aws docdb create-db-cluster `
+  --region $Region `
+  --db-cluster-identifier "$Project-docdb" `
+  --engine docdb `
+  --master-username <username> `
+  --master-user-password <password> `
+  --db-subnet-group-name $DocDbSubnetGroup `
+  --vpc-security-group-ids $DocDbSgId `
+  --storage-encrypted
+
+aws docdb create-db-instance `
+  --region $Region `
+  --db-instance-identifier "$Project-docdb-1" `
+  --db-cluster-identifier "$Project-docdb" `
+  --engine docdb `
+  --db-instance-class db.t3.medium
+```
+
+After cluster is available, get endpoint:
+
+```powershell
+$DocDbEndpoint = aws docdb describe-db-clusters `
+  --region $Region `
+  --db-cluster-identifier "$Project-docdb" `
+  --query "DBClusters[0].Endpoint" `
+  --output text
+```
+
+Create Secrets Manager secret for Lambda:
+
+```powershell
+$DocDbUri = "mongodb://<username>:<password>@$DocDbEndpoint`:27017/taskio?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+aws secretsmanager create-secret `
+  --region $Region `
+  --name "$Project/documentdb" `
+  --secret-string "{`"uri`":`"$DocDbUri`",`"database`":`"taskio`"}"
+```
+
+Use `$DocDbUri` in backend `api.env` as `MONGODB_URI`.
+
+### B6. Package backend and store env
 
 ```powershell
 $stage = "E:\bomb\.deploy\taskio-api-package"
@@ -643,7 +798,7 @@ aws ssm put-parameter `
   --overwrite
 ```
 
-### B6. Backend IAM role and instance profile
+### B7. Backend IAM role and instance profile
 
 ```powershell
 @'
@@ -688,7 +843,7 @@ aws iam create-instance-profile --instance-profile-name "$Project-ec2-profile"
 aws iam add-role-to-instance-profile --instance-profile-name "$Project-ec2-profile" --role-name "$Project-ec2-role"
 ```
 
-### B7. Backend ALB, launch template, ASG
+### B8. Backend ALB, launch template, ASG
 
 Tao user data file `backend-user-data.sh`. Gia tri `$EfsId`, `$ArtifactBucket`, region va env parameter can thay dung truoc khi tao launch template.
 
@@ -795,7 +950,7 @@ aws autoscaling create-auto-scaling-group `
   --target-group-arns $TgArn
 ```
 
-### B8. Bedrock Knowledge Base for docs chatbot by CLI
+### B9. Bedrock Knowledge Base for docs chatbot by CLI
 
 Neu team deploy bang CLI, van co the tao KB bang Console cho nhanh. Neu can CLI, flow toi thieu la:
 
@@ -857,7 +1012,7 @@ KB_ID=<bedrock-kb-id>
 
 Note: `w5-source/lambdas/iam-policies/kb-config.json` la reference config. Khong dung y nguyen ARN account cu; thay role ARN, embedding model region, vector index ARN theo environment moi.
 
-### B9. Package and upload Lambdas
+### B10. Package and upload Lambdas
 
 ```powershell
 tar -a -cf E:\bomb\taskio-ai-lambdas\jwtAuthorizer.zip -C E:\bomb\taskio-ai-lambdas\jwtAuthorizer .
@@ -869,9 +1024,9 @@ aws s3 cp E:\bomb\taskio-ai-lambdas\askDocsBot.zip "s3://$ArtifactBucket/lambda/
 aws s3 cp E:\bomb\taskio-ai-lambdas\summarizeWorkspace.zip "s3://$ArtifactBucket/lambda/summarizeWorkspace.zip" --region $Region
 ```
 
-### B10. Lambda IAM roles and functions
+### B11. Lambda IAM roles and functions
 
-Tao IAM roles theo Console section A7 hoac dung policy JSON trong `w5-source/lambdas/iam-policies/`.
+Tao IAM roles theo Console section A8 hoac dung policy JSON trong `w5-source/lambdas/iam-policies/`.
 
 Create/update functions:
 
@@ -909,7 +1064,7 @@ aws lambda create-function `
   --environment "Variables={MONGO_SECRET_ARN=<mongo-secret-arn>,MODEL_ARN=<bedrock-model-or-inference-profile-arn>}"
 ```
 
-### B11. REST API Gateway + Usage Plan
+### B12. REST API Gateway + Usage Plan
 
 Generate an API key value:
 
@@ -1001,7 +1156,7 @@ Note: CORS `OPTIONS` co the tao bang Console de nhanh hon, hoac bang CLI `put-me
 - Headers: `authorization,content-type,x-api-key`
 - Methods: `POST,OPTIONS`
 
-### B12. Update frontend
+### B13. Update frontend
 
 Set `.env.production`:
 
@@ -1079,7 +1234,8 @@ df -h /mnt/taskio-shared
 - Suggested future collection: `aiUsageCounters`.
 - `askDocsBot` currently depends on a valid Bedrock Knowledge Base ID. If KB ID is missing/deleted, gateway/auth layer works but Lambda returns internal error.
 - Bedrock KB docs source is owned by anh Tien in the current team flow; pull those docs before sync/ingestion.
+- Database path is AWS DocumentDB in private subnets. Backend reads it through `MONGODB_URI`; `summarizeWorkspace` reads it through Secrets Manager and needs VPC access if connecting directly.
 
 ## 9. Recommended message to team
 
-Repo nay la buoc network foundation bang Terraform. Sau khi VPC/Peering xong, team deploy expanded W5 layer bang AWS Console hoac AWS CLI, khong lay CloudFormation lam path chinh. CloudFormation chi giu lai de tham khao resource/config. Current production da migrate AI tu HTTP API sang REST API de co API Key + Usage Plan. Backend chay EC2 private subnet sau ALB, EFS dung lam shared temporary storage cho workspace export.
+Repo nay la buoc network foundation bang Terraform. Sau khi VPC/Peering xong, team deploy expanded W5 layer bang AWS Console hoac AWS CLI, khong lay CloudFormation lam path chinh. CloudFormation chi giu lai de tham khao resource/config. Backend chay EC2 private subnet sau ALB, DocumentDB nam private subnet lam database, EFS dung lam shared temporary storage cho workspace export. AI dung Bedrock KB + Lambda sau REST API Gateway co API Key + Usage Plan.
