@@ -565,6 +565,14 @@ Create REST API:
 
 - Name: `taskio-w5-ai-rest-api`
 - Endpoint type: Regional
+- Security policy: `securitypolicy_tls13_1_3_2025_09`
+- IP address type: IPv4
+
+Ly do:
+
+- Regional vi frontend public/CloudFront can goi API Gateway public endpoint.
+- TLS 1.3 policy la policy moi hon legacy TLS 1.2, dung cho HTTPS security default hien dai.
+- IPv4 du cho current frontend path; dualstack chi can khi team muon support IPv6 client.
 
 Resources/routes:
 
@@ -1102,6 +1110,7 @@ $ApiId = aws apigateway create-rest-api `
   --region $Region `
   --name "$Project-ai-rest-api" `
   --endpoint-configuration types=REGIONAL `
+  --ip-address-type ipv4 `
   --query "id" `
   --output text
 
@@ -1165,6 +1174,8 @@ $UsagePlanId = aws apigateway create-usage-plan `
   --output text
 aws apigateway create-usage-plan-key --region $Region --usage-plan-id $UsagePlanId --key-id $ApiKeyId --key-type API_KEY
 ```
+
+Console note: neu AWS Console hoi Security policy, chon `securitypolicy_tls13_1_3_2025_09`. AWS CLI support cho setting nay co the khac theo version/API; neu CLI khong expose flag, set/update bang Console sau khi tao API.
 
 Get outputs:
 
