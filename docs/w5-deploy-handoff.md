@@ -35,7 +35,7 @@ Main endpoints:
 
 - Frontend: `https://taskio.nigga.in.net/`
 - Backend API through CloudFront: `https://taskio.nigga.in.net/api/v1/health`
-- AI REST API: `https://brvl2lapkl.execute-api.us-east-1.amazonaws.com/prod`
+- AI REST API: `https://sh1m88596j.execute-api.us-west-2.amazonaws.com/prod`
 
 Important deployed resources:
 
@@ -299,8 +299,8 @@ File local build: `w5-source/frontend/.env.production`.
 
 ```text
 VITE_API_ROOT=https://taskio.nigga.in.net/api
-VITE_AI_API_URL=https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/prod
-VITE_AI_API_KEY=<api-gateway-api-key-value>
+VITE_AI_API_URL=https://sh1m88596j.execute-api.us-west-2.amazonaws.com/prod
+VITE_AI_API_KEY=<api-key-value-from-deploy-env>
 ```
 
 Mapping:
@@ -615,8 +615,8 @@ Set production env:
 
 ```text
 VITE_API_ROOT=https://taskio.nigga.in.net/api
-VITE_AI_API_URL=https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/prod
-VITE_AI_API_KEY=<api-key-value>
+VITE_AI_API_URL=https://sh1m88596j.execute-api.us-west-2.amazonaws.com/prod
+VITE_AI_API_KEY=<api-key-value-from-deploy-env>
 ```
 
 Build and upload:
@@ -1195,8 +1195,8 @@ Set `.env.production`:
 
 ```text
 VITE_API_ROOT=https://taskio.nigga.in.net/api
-VITE_AI_API_URL=https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/prod
-VITE_AI_API_KEY=<api-key-value>
+VITE_AI_API_URL=https://sh1m88596j.execute-api.us-west-2.amazonaws.com/prod
+VITE_AI_API_KEY=<api-key-value-from-deploy-env>
 ```
 
 Build/deploy:
