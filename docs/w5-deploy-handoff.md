@@ -119,7 +119,29 @@ CloudFront/frontend outputs:
 - Frontend domain -> set backend CORS `CORS_ALLOWED_ORIGINS`.
 - CloudFront distribution ID -> dung de invalidate sau moi lan deploy frontend.
 
-### 3.2 AWS DocumentDB setup
+### 3.2 VPC placement note for deploy
+
+Sau Terraform foundation, team co 2 VPC:
+
+- `vpc-application`: app runtime boundary.
+- `vpc-ai`: AI/private integration boundary.
+
+Deploy placement hien tai:
+
+- Backend EC2, ALB, EFS, DocumentDB, Redis: dat trong `vpc-application`.
+- `summarizeWorkspace` Lambda: neu can doc DocumentDB private endpoint thi attach vao private subnets cua `vpc-application`.
+- `askDocsBot` Lambda: chi goi Bedrock KB nen co the de ngoai VPC.
+- `jwtAuthorizer` Lambda: chi doc SSM JWT secret nen co the de ngoai VPC.
+- Bedrock Knowledge Base: AWS managed service, khong nam truc tiep trong subnet cua `vpc-ai` hay `vpc-application`.
+
+Important:
+
+- Khong phai cu "AI Lambda" la bat buoc deploy vao `vpc-ai`.
+- Chi attach Lambda vao VPC khi Lambda can access private resource nhu DocumentDB/Redis/private endpoint.
+- Neu sau nay dat AI worker/private service trong `vpc-ai` va can doc DB o `vpc-application`, phai co VPC Peering route 2 chieu va SG/CIDR allow port can thiet.
+- VPC Flow Logs bat tren ca 2 VPC de audit traffic qua peering.
+
+### 3.3 AWS DocumentDB setup
 
 Team dung AWS DocumentDB lam database chinh. DocumentDB khong public ra Internet; dat trong private subnet cua VPC.
 
@@ -169,7 +191,7 @@ Notes:
 - If DocumentDB is placed in `vpc-ai` instead of `vpc-application`, ensure VPC peering routes and SG/CIDR rules allow app/Lambda traffic to port `27017`.
 - Frontend never connects to DocumentDB directly. Frontend only talks to backend/API Gateway.
 
-### 3.3 Backend API env
+### 3.4 Backend API env
 
 Store backend env trong SSM SecureString, vi du `/taskio/w5/api-env`. EC2 user data pull ve `/opt/taskio-api/.env`.
 
@@ -228,7 +250,7 @@ Notes:
 - `ACCESS_TOKEN_SECRET_SIGNATURE` phai trung voi secret ma Lambda authorizer dung de verify JWT.
 - `CORS_ALLOWED_ORIGINS` phai co frontend domain, neu khong browser se bi CORS.
 
-### 3.4 Lambda env
+### 3.5 Lambda env
 
 `jwtAuthorizer`:
 
@@ -271,7 +293,7 @@ Notes:
 - `MODEL_ARN` co the khac nhau giua chatbot docs va workspace summary tuy model/region team chon.
 - Lambda IAM role can CloudWatch Logs, Bedrock permissions, va SSM/Secrets Manager permissions tuong ung.
 
-### 3.5 Frontend env
+### 3.6 Frontend env
 
 File local build: `w5-source/frontend/.env.production`.
 
@@ -289,7 +311,7 @@ Mapping:
 
 Note: API key trong SPA khong phai secret manh vi user co the thay trong browser. No dung de Gateway throttle/quota, con auth that van la JWT qua Lambda authorizer.
 
-### 3.6 Config bridge checklist
+### 3.7 Config bridge checklist
 
 Truoc khi test end-to-end, check cac diem nay:
 
