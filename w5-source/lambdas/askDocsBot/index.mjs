@@ -33,7 +33,11 @@ function stripEmojis(text) {
 function resp(statusCode, body) {
   return {
     statusCode,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://nguyenductien.cloud',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Api-Key'
+    },
     body: JSON.stringify(body)
   }
 }

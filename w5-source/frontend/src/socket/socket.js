@@ -11,8 +11,8 @@ const initSocket = () => {
   // })
 
   socketInstance = io(window.location.origin, {
-    withCredentials: true
-    // transports: ['websocket']
+    withCredentials: true,
+    transports: ['websocket']
   })
 
   socketInstance.on('connect', () => {

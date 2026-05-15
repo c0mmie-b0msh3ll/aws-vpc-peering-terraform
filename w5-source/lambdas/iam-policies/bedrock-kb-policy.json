@@ -2,22 +2,34 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ReadKnowledgeBaseDocuments",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
       "Resource": [
-        "arn:aws:s3:::taskio-ai-docs-641599642578-us-west-2",
-        "arn:aws:s3:::taskio-ai-docs-641599642578-us-west-2/*"
+        "arn:aws:s3:::taskio-w5-ai-docs-072937283954",
+        "arn:aws:s3:::taskio-w5-ai-docs-072937283954/*"
       ]
     },
     {
+      "Sid": "InvokeEmbeddingModel",
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
       "Resource": "arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0"
     },
     {
+      "Sid": "UseS3VectorsIndex",
       "Effect": "Allow",
-      "Action": ["s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:QueryVectors", "s3vectors:DeleteVectors", "s3vectors:ListVectors"],
-      "Resource": "arn:aws:s3vectors:us-west-2:641599642578:bucket/bedrock-knowledge-base-qpozoc/*"
+      "Action": [
+        "s3vectors:PutVectors",
+        "s3vectors:GetVectors",
+        "s3vectors:QueryVectors",
+        "s3vectors:DeleteVectors",
+        "s3vectors:ListVectors"
+      ],
+      "Resource": "arn:aws:s3vectors:us-west-2:072937283954:bucket/bedrock-knowledge-base-db86c0/index/bedrock-knowledge-base-default-index"
     }
   ]
 }

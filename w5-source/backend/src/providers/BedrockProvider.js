@@ -10,11 +10,7 @@ const GET_BEDROCK_CLIENT = () => {
   if (bedrockClient) return bedrockClient
 
   bedrockClient = new BedrockRuntimeClient({
-    region: env.BEDROCK_REGION,
-    credentials: {
-      accessKeyId: env.BEDROCK_AWS_ACCESS_KEY_ID,
-      secretAccessKey: env.BEDROCK_AWS_SECRET_ACCESS_KEY
-    }
+    region: env.BEDROCK_REGION
   })
 
   return bedrockClient

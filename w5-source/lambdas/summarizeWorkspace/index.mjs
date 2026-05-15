@@ -29,7 +29,11 @@ Do NOT invent data not present in the input. If a section has no relevant info, 
 function resp(statusCode, body) {
   return {
     statusCode,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://nguyenductien.cloud',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Api-Key'
+    },
     body: JSON.stringify(body)
   }
 }
